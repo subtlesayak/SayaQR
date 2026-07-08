@@ -1,0 +1,18 @@
+{
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  },
+  "license": "MIT",
+  "name": "sayaqr",
+  "version": "0.1.0",
+  "type": "module"
+}
