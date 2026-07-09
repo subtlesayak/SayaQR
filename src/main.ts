@@ -1,7 +1,6 @@
 import "./style.css";
 import { detectQrContent, type DetectionResult } from "./lib/autodetect";
 import { parseCsv, safeFileName, type CsvData } from "./lib/csv";
-import { getQrHealthBadge } from "./lib/health";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
 import { getScannabilityWarnings } from "./lib/scannability";
@@ -9,21 +8,12 @@ import {
   buildSvgFromQr,
   DEFAULT_RENDER_OPTIONS,
   qrPdfBlob,
-  qrStickerSheetPdfBlob,
   svgBlob,
   svgToRasterBlob,
   type FinderStyle,
   type QrRenderOptions,
 } from "./lib/render";
-import {
-  QR_STYLE_PRESETS,
-  defaultStyleParams,
-  getStylePreset,
-  type StyleParamControl,
-  type StyleParamValue,
-  type StyleParams,
-} from "./lib/stylePresets";
-import type { ZipInputFile } from "./lib/zip";
+import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
   name: string;
@@ -36,17 +26,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const STYLE_PREF_KEY = "sayaqr-preferred-style";
-const BRAND_KIT_KEY = "sayaqr-brand-kit-v1";
-
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
-type TemplateId = "" | "whatsapp" | "social" | "deep-link" | "upi-polished" | "wifi-guest" | "vcard-polished";
-
-interface BrandKit {
-  colors: string[];
-  stylePresetId: string;
-  logoDataUrl?: string;
-}
 
 const QUICK_FIELD_BY_MODE: Record<QrMode, string> = {
   text: "text",
@@ -60,24 +40,6 @@ const QUICK_FIELD_BY_MODE: Record<QrMode, string> = {
   event: "title",
   geo: "label",
 };
-
-type QrTemplate = {
-  id: TemplateId;
-  label: string;
-  mode: QrMode;
-  fields: PayloadFields;
-  quickContent?: string;
-};
-
-const QR_TEMPLATES: QrTemplate[] = [
-  { id: "", label: "No template", mode: "url", fields: {} },
-  { id: "whatsapp", label: "WhatsApp message", mode: "url", quickContent: "https://wa.me/15551234567?text=Hello%20from%20SayaQR", fields: { url: "https://wa.me/15551234567?text=Hello%20from%20SayaQR" } },
-  { id: "social", label: "Instagram/social profile", mode: "url", quickContent: "instagram.com/subtlesayak", fields: { url: "instagram.com/subtlesayak" } },
-  { id: "deep-link", label: "App deep link", mode: "url", quickContent: "myapp://open/profile/123", fields: { url: "myapp://open/profile/123" } },
-  { id: "upi-polished", label: "UPI payment", mode: "upi", fields: { payeeAddress: "name@bank", payeeName: "Subtle Sayak", amount: "250.00", currency: "INR", note: "Payment" } },
-  { id: "wifi-guest", label: "Guest Wi-Fi", mode: "wifi", fields: { ssid: "Guest Wi-Fi", auth: "WPA", password: "guest-password", hidden: false } },
-  { id: "vcard-polished", label: "vCard contact", mode: "vcard", fields: { firstName: "Subtle", lastName: "Sayak", fullName: "Subtle Sayak", company: "SayaQR", title: "Creator", phone: "+15551234567", email: "hello@example.com", website: "https://subtlesayak.github.io/", note: "Generated locally with SayaQR" } },
-];
 const MODE_FIELDS: Record<QrMode, FieldConfig[]> = {
   text: [{ name: "text", label: "Text", type: "textarea", rows: 6, defaultValue: "Generated locally by SayaQR" }],
   url: [{ name: "url", label: "URL", type: "url", placeholder: "example.com", defaultValue: "https://github.com/subtlesayak/SayaQR" }],
@@ -154,8 +116,6 @@ let logoDataUrl = "";
 let currentPayload = "";
 let currentSvg = "";
 let batchData: CsvData | null = null;
-let currentStylePresetId = localStorage.getItem(STYLE_PREF_KEY) || DEFAULT_RENDER_OPTIONS.stylePresetId || "classic";
-let currentStyleParams: StyleParams = defaultStyleParams(currentStylePresetId);
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -188,73 +148,6 @@ function renderField(field: FieldConfig): string {
   return `<label class="field" for="${fieldId(field.name)}"><span>${field.label}</span><input id="${fieldId(field.name)}" data-payload-field="${field.name}" type="${field.type}" value="${escapeHtml(value)}"${placeholder}/></label>`;
 }
 
-function renderTemplateOptions(): string {
-  return QR_TEMPLATES.map((template) => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.label)}</option>`).join("");
-}
-
-function renderStylePresetOptions(): string {
-  return QR_STYLE_PRESETS.map(
-    (preset) => `<option value="${escapeHtml(preset.id)}" ${preset.id === currentStylePresetId ? "selected" : ""}>${escapeHtml(preset.name)}</option>`,
-  ).join("");
-}
-
-function formatStyleParamValue(control: StyleParamControl, value: StyleParamValue | undefined): string {
-  if (typeof value === "boolean") return value ? "On" : "Off";
-  if (typeof value !== "number") return String(value ?? "");
-  if (["scale", "radius", "opacity"].includes(control.id)) return `${Math.round(value * 100)}%`;
-  return value.toFixed(2).replace(/\.00$/, "");
-}
-
-function renderStyleParamControl(control: StyleParamControl): string {
-  const preset = getStylePreset(currentStylePresetId);
-  const value = currentStyleParams[control.id] ?? preset.defaults[control.id];
-  const id = `style-param-${control.id}`;
-  if (control.type === "checkbox") {
-    return `<label class="switch style-param"><input id="${id}" data-style-param="${escapeHtml(control.id)}" type="checkbox" ${value === true ? "checked" : ""}/><span>${escapeHtml(control.label)}</span></label>`;
-  }
-  if (control.type === "select") {
-    const options = control.options?.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("") ?? "";
-    return `<label class="field style-param" for="${id}"><span>${escapeHtml(control.label)}</span><select id="${id}" data-style-param="${escapeHtml(control.id)}">${options}</select></label>`;
-  }
-  const numericValue = typeof value === "number" ? value : Number(control.min ?? 0);
-  return `<label class="field style-param" for="${id}"><span>${escapeHtml(control.label)} <strong id="${id}-value">${escapeHtml(formatStyleParamValue(control, numericValue))}</strong></span><input id="${id}" data-style-param="${escapeHtml(control.id)}" type="range" min="${control.min ?? 0}" max="${control.max ?? 1}" step="${control.step ?? 0.01}" value="${numericValue}" /></label>`;
-}
-
-function renderStyleControlsMarkup(): string {
-  const preset = getStylePreset(currentStylePresetId);
-  if (preset.controls.length === 0) return `<p class="muted-note">This preset keeps the standard QR shape.</p>`;
-  return preset.controls.map(renderStyleParamControl).join("");
-}
-
-function loadBrandKit(): BrandKit {
-  try {
-    const stored = localStorage.getItem(BRAND_KIT_KEY);
-    if (!stored) return { colors: [DEFAULT_RENDER_OPTIONS.foreground], stylePresetId: currentStylePresetId };
-    const parsed = JSON.parse(stored) as Partial<BrandKit>;
-    const colors = Array.isArray(parsed.colors) ? parsed.colors.map((color) => normalizeHexColor(String(color))).filter((color): color is string => Boolean(color)).slice(0, 3) : [];
-    return {
-      colors: colors.length ? colors : [DEFAULT_RENDER_OPTIONS.foreground],
-      stylePresetId: typeof parsed.stylePresetId === "string" ? parsed.stylePresetId : currentStylePresetId,
-      logoDataUrl: typeof parsed.logoDataUrl === "string" ? parsed.logoDataUrl : "",
-    };
-  } catch {
-    return { colors: [DEFAULT_RENDER_OPTIONS.foreground], stylePresetId: currentStylePresetId };
-  }
-}
-
-function saveBrandKit(brandKit: BrandKit): boolean {
-  try {
-    localStorage.setItem(BRAND_KIT_KEY, JSON.stringify({ ...brandKit, colors: brandKit.colors.slice(0, 3) }));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function renderBrandColorChips(): string {
-  const brandKit = loadBrandKit();
-  return brandKit.colors.map((color) => `<button class="brand-swatch" type="button" data-brand-color="${escapeHtml(color)}" style="--brand-color: ${escapeHtml(color)}" aria-label="Use brand color ${escapeHtml(color)}"></button>`).join("");
-}
 function renderApp(): void {
   appRoot.innerHTML = `
     <header class="topbar">
@@ -262,7 +155,7 @@ function renderApp(): void {
         <div class="brand">
           <div>
             <h1>SayaQR</h1>
-            <p>Content -> style -> download</p>
+            <p>Offline QR generator</p>
           </div>
         </div>
       </div>
@@ -288,114 +181,59 @@ function renderApp(): void {
     <main class="workspace">
       <section class="tool-surface controls" aria-label="QR controls">
         <div class="section-heading">
-          <h2>QR content</h2>
+          <h2>Content</h2>
           <span id="modeHint"></span>
         </div>
-        <label class="field field-wide quick-content" for="autoContent"><span>Content</span><textarea id="autoContent" rows="3" placeholder="Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates"></textarea></label>
-        <div class="simple-grid">
-          <label class="field" for="modeSelect"><span>QR type</span><select id="modeSelect" aria-label="QR category"></select></label>
-          <label class="field" for="templateSelect"><span>Template</span><select id="templateSelect" aria-label="QR template">${renderTemplateOptions()}</select></label>
-          <label class="field" for="stylePreset"><span>Style preset</span><select id="stylePreset">${renderStylePresetOptions()}</select></label>
-          <label class="field color-control" for="mainColorHex">
-            <span>Main color</span>
-            <span class="color-shell">
-              <span class="color-swatch-wrap">
-                <input id="mainColor" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Main color picker" />
-                <span id="mainColorSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.foreground}" aria-hidden="true"></span>
-              </span>
-              <input id="mainColorHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Main color hex code" />
-            </span>
-          </label>
-          <div class="brand-kit field-wide">
-            <div>
-              <strong>Brand kit</strong>
-              <span id="brandKitStatus">Save up to 3 colors and a preferred style.</span>
-            </div>
-            <div id="brandColors" class="brand-colors">${renderBrandColorChips()}</div>
-            <div class="brand-actions">
-              <button id="saveBrandKit" type="button">Save brand</button>
-              <button id="useBrandPreset" type="button">Use brand preset</button>
-            </div>
-          </div>
-          <button id="quickDownload" class="primary-download field-wide" type="button" data-export="png"><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download PNG</span></button>
+        <label class="field field-wide quick-content" for="autoContent"><span>Quick content</span><textarea id="autoContent" rows="3" placeholder="Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates"></textarea></label>
+        <div class="category-row">
+          <label class="field category-select" for="modeSelect"><span>Category</span><select id="modeSelect" aria-label="QR category"></select></label>
         </div>
         <p id="autoDetectStatus" class="detect-status" aria-live="polite">Paste content above, then auto-detect its category.</p>
-        <p id="presetDescription" class="preset-description">${escapeHtml(getStylePreset(currentStylePresetId).description)}</p>
-        <div id="styleControls" class="style-controls">${renderStyleControlsMarkup()}</div>
+        <form id="payloadForm" class="payload-grid"></form>
 
-        <details id="advancedPanel" class="advanced-panel">
-          <summary><span>Advanced options</span><small>Error correction, exports, logo, batch CSV</small></summary>
-          <div class="advanced-body">
-            <div class="section-heading compact"><h2>Mode details</h2><span>Optional structured fields</span></div>
-            <form id="payloadForm" class="payload-grid"></form>
-
-            <div class="section-heading compact"><h2>Design details</h2></div>
-            <div class="design-grid">
-              <label class="field color-mode-field" for="colorMode"><span>Advanced color</span><select id="colorMode"><option value="default" selected>Main color only</option><option value="custom">Custom foreground/background</option></select></label>
-              <div id="customColorPanel" class="custom-color-panel" hidden>
-                <label class="field design-pair color-control" for="foregroundHex">
-                  <span>Foreground</span>
-                  <span class="color-shell">
-                    <span class="color-swatch-wrap">
-                      <input id="foreground" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Foreground color picker" />
-                      <span id="foregroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.foreground}" aria-hidden="true"></span>
-                    </span>
-                    <input id="foregroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Foreground hex color" />
-                  </span>
-                </label>
-                <label class="field design-pair color-control" for="backgroundHex">
-                  <span>Background</span>
-                  <span class="color-shell">
-                    <span class="color-swatch-wrap">
-                      <input id="background" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" aria-label="Background color picker" />
-                      <span id="backgroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.background}" aria-hidden="true"></span>
-                    </span>
-                    <input id="backgroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.background}" inputmode="text" spellcheck="false" aria-label="Background hex color" />
-                  </span>
-                </label>
-                <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
-              </div>
-              <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
-              <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
-              <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
-              <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
-              <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
-              <label class="field field-wide"><span>Center logo</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
-              <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
-            </div>
-
-            <div class="section-heading compact"><h2>Export details</h2><span>Everything stays local</span></div>
-            <div class="advanced-export-row" aria-label="Advanced export formats">
-              <button type="button" data-export="copy-svg">Copy SVG</button>
-              <button type="button" data-export="png-transparent">Transparent PNG</button>
-              <button type="button" data-export="png-white">White PNG</button>
-              <button type="button" data-export="pdf-print">Print PDF</button>
-              <button type="button" data-export="pdf-sticker">Sticker sheet PDF</button>
-            </div>
-
-            <div class="section-heading compact"><h2>Batch CSV</h2><span id="batchSummary">No CSV loaded</span></div>
-            <div class="batch-grid">
-              <label class="field field-wide"><span>CSV file</span><input id="csvUpload" type="file" accept=".csv,text/csv" /></label>
-              <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
-              <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
-              <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="png-transparent">Transparent PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
-              <button id="exportZip" type="button" disabled>Export ZIP</button>
-            </div>
-            <div id="batchPreview" class="batch-preview"></div>
+        <div class="section-heading compact"><h2>Design</h2></div>
+        <div class="design-grid">
+          <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="custom">Custom</option></select></label>
+          <div id="customColorPanel" class="custom-color-panel" hidden>
+            <label class="field design-pair color-control" for="foregroundHex">
+              <span>Foreground</span>
+              <span class="color-shell">
+                <span class="color-swatch-wrap">
+                  <input id="foreground" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Foreground color picker" />
+                  <span id="foregroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.foreground}" aria-hidden="true"></span>
+                </span>
+                <input id="foregroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Foreground hex color" />
+              </span>
+            </label>
+            <label class="field design-pair color-control" for="backgroundHex">
+              <span>Background</span>
+              <span class="color-shell">
+                <span class="color-swatch-wrap">
+                  <input id="background" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" aria-label="Background color picker" />
+                  <span id="backgroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.background}" aria-hidden="true"></span>
+                </span>
+                <input id="backgroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.background}" inputmode="text" spellcheck="false" aria-label="Background hex color" />
+              </span>
+            </label>
+            <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
           </div>
-        </details>
+          <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
+          <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
+          <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
+          <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
+          <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
+          <label class="field field-wide"><span>Center logo</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
+          <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
+        </div>
       </section>
 
       <section class="tool-surface preview-zone" aria-label="QR preview">
         <div class="preview-header">
           <div>
-            <h2>Live preview</h2>
+            <h2>Preview</h2>
             <p id="qrStats">Ready</p>
           </div>
-          <div class="preview-badges">
-            <div id="qrHealthBadge" class="health-badge health-good">Good</div>
-            <div id="offlineStatus" class="status-pill">Offline ready</div>
-          </div>
+          <div id="offlineStatus" class="status-pill">Offline ready</div>
         </div>
         <div id="qrPreview" class="qr-preview"></div>
         <div id="warnings" class="warnings" aria-live="polite"></div>
@@ -407,6 +245,18 @@ function renderApp(): void {
           <button type="button" data-export="pdf">PDF</button>
         </div>
       </section>
+
+      <section class="tool-surface batch-zone" aria-label="Batch mode">
+        <div class="section-heading"><h2>Batch CSV</h2><span id="batchSummary">No CSV loaded</span></div>
+        <div class="batch-grid">
+          <label class="field field-wide"><span>CSV file</span><input id="csvUpload" type="file" accept=".csv,text/csv" /></label>
+          <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
+          <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
+          <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
+          <button id="exportZip" type="button" disabled>Export ZIP</button>
+        </div>
+        <div id="batchPreview" class="batch-preview"></div>
+      </section>
     </main>
     <footer class="site-footer">
       <div class="footer-privacy" aria-label="Privacy guarantees">
@@ -414,7 +264,6 @@ function renderApp(): void {
         <span>No tracking</span>
         <span>No upload</span>
       </div>
-      <a class="footer-beta" href="https://subtlesayak.github.io/SayaQR/beta/" target="_blank" rel="noreferrer">Beta</a>
       <p class="footer-credit">
         Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Subtle Sayak</a>.
         QR encoding by <a href="https://www.nayuki.io/page/qr-code-generator-library" target="_blank" rel="noreferrer">Nayuki's MIT-licensed QR Code generator</a>.
@@ -501,7 +350,7 @@ function updateFromQuickContent(rawValue: string): void {
   updateQr();
 }
 
-type ColorControlId = "mainColor" | "foreground" | "background";
+type ColorControlId = "foreground" | "background";
 
 function normalizeHexColor(value: string): string | null {
   const cleaned = value.trim().replace(/^#/, "");
@@ -540,94 +389,6 @@ function syncColorControl(id: ColorControlId, source: "picker" | "hex"): boolean
   return true;
 }
 
-function setColorControl(id: ColorControlId, value: string): void {
-  const normalized = normalizeHexColor(value);
-  if (!normalized) return;
-  const picker = document.querySelector<HTMLInputElement>(`#${id}`);
-  const hexInput = document.querySelector<HTMLInputElement>(`#${id}Hex`);
-  if (picker) picker.value = colorPickerValue(normalized);
-  if (hexInput) hexInput.value = normalized;
-  syncColorControl(id, "hex");
-}
-
-function renderStyleControls(): void {
-  const preset = getStylePreset(currentStylePresetId);
-  const select = document.querySelector<HTMLSelectElement>("#stylePreset");
-  const description = document.querySelector<HTMLParagraphElement>("#presetDescription");
-  const controls = document.querySelector<HTMLDivElement>("#styleControls");
-  if (select) select.value = preset.id;
-  if (description) description.textContent = preset.description;
-  if (controls) controls.innerHTML = renderStyleControlsMarkup();
-}
-
-function setStylePreset(id: string): void {
-  const preset = getStylePreset(id);
-  currentStylePresetId = preset.id;
-  currentStyleParams = defaultStyleParams(preset.id);
-  localStorage.setItem(STYLE_PREF_KEY, preset.id);
-  renderStyleControls();
-}
-
-function updateStyleParam(input: HTMLInputElement | HTMLSelectElement): void {
-  const key = input.dataset.styleParam;
-  if (!key) return;
-  const preset = getStylePreset(currentStylePresetId);
-  const control = preset.controls.find((item) => item.id === key);
-  if (!control) return;
-
-  let value: StyleParamValue = input.value;
-  if (input instanceof HTMLInputElement && input.type === "checkbox") value = input.checked;
-  if (control.type === "range") value = Number(input.value);
-  currentStyleParams = { ...currentStyleParams, [key]: value };
-
-  const label = document.querySelector<HTMLElement>(`#style-param-${key}-value`);
-  if (label) label.textContent = formatStyleParamValue(control, value);
-}
-
-function applyTemplate(templateId: TemplateId): void {
-  const template = QR_TEMPLATES.find((item) => item.id === templateId);
-  if (!template || !template.id) return;
-  const quickInput = document.querySelector<HTMLTextAreaElement>("#autoContent");
-  currentMode = template.mode;
-  categorySelection = template.mode;
-  renderModeTabs();
-  renderPayloadFields();
-  setPayloadFields(template.fields);
-  if (quickInput) quickInput.value = template.quickContent ?? "";
-  const status = document.querySelector<HTMLParagraphElement>("#autoDetectStatus");
-  if (status) status.textContent = `${template.label} template applied. Edit details below if needed.`;
-  updateQr();
-}
-
-function collectBrandColors(): string[] {
-  const colors = [
-    readColorControl("mainColor", DEFAULT_RENDER_OPTIONS.foreground),
-    readColorControl("foreground", DEFAULT_RENDER_OPTIONS.foreground),
-    readColorControl("background", DEFAULT_RENDER_OPTIONS.background),
-  ];
-  return Array.from(new Set(colors.map((color) => normalizeHexColor(color)).filter((color): color is string => Boolean(color)))).slice(0, 3);
-}
-
-function refreshBrandKitUi(message?: string): void {
-  const colors = document.querySelector<HTMLDivElement>("#brandColors");
-  const status = document.querySelector<HTMLSpanElement>("#brandKitStatus");
-  if (colors) colors.innerHTML = renderBrandColorChips();
-  if (status && message) status.textContent = message;
-}
-
-function saveCurrentBrandKit(): void {
-  const ok = saveBrandKit({ colors: collectBrandColors(), stylePresetId: currentStylePresetId, logoDataUrl: logoDataUrl || undefined });
-  refreshBrandKitUi(ok ? "Brand preset saved locally." : "Could not save brand preset in this browser.");
-}
-
-function useBrandPreset(): void {
-  const brandKit = loadBrandKit();
-  if (brandKit.colors[0]) setColorControl("mainColor", brandKit.colors[0]);
-  if (brandKit.logoDataUrl) logoDataUrl = brandKit.logoDataUrl;
-  setStylePreset(brandKit.stylePresetId);
-  refreshBrandKitUi("Brand preset applied.");
-  updateQr();
-}
 function updateCustomColorPanel(): void {
   const colorMode = document.querySelector<HTMLSelectElement>("#colorMode")?.value ?? "default";
   const panel = document.querySelector<HTMLDivElement>("#customColorPanel");
@@ -644,9 +405,8 @@ function collectPayloadFields(): PayloadFields {
 }
 
 function getRenderOptions(): QrRenderOptions {
-  const mainColor = readColorControl("mainColor", DEFAULT_RENDER_OPTIONS.foreground);
   const useCustomColors = document.querySelector<HTMLSelectElement>("#colorMode")?.value === "custom";
-  const foreground = useCustomColors ? readColorControl("foreground", mainColor) : mainColor;
+  const foreground = useCustomColors ? readColorControl("foreground", DEFAULT_RENDER_OPTIONS.foreground) : DEFAULT_RENDER_OPTIONS.foreground;
   const background = useCustomColors ? readColorControl("background", DEFAULT_RENDER_OPTIONS.background) : DEFAULT_RENDER_OPTIONS.background;
   const transparentBackground = useCustomColors ? (document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false) : false;
   const margin = Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin);
@@ -656,20 +416,7 @@ function getRenderOptions(): QrRenderOptions {
   const ecc = (document.querySelector<HTMLSelectElement>("#ecc")?.value ?? DEFAULT_RENDER_OPTIONS.ecc) as QrRenderOptions["ecc"];
   const logoScale = Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? DEFAULT_RENDER_OPTIONS.logoScale);
 
-  return {
-    foreground,
-    background,
-    transparentBackground,
-    margin,
-    moduleSize,
-    rounded,
-    finderStyle,
-    logoDataUrl,
-    logoScale,
-    ecc,
-    stylePresetId: currentStylePresetId,
-    styleParams: currentStyleParams,
-  };
+  return { foreground, background, transparentBackground, margin, moduleSize, rounded, finderStyle, logoDataUrl, logoScale, ecc };
 }
 
 function updateSliderLabels(): void {
@@ -700,21 +447,6 @@ function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: 
     .join("");
 }
 
-function renderHealthBadge(options: QrRenderOptions, payloadLength: number): void {
-  const badge = document.querySelector<HTMLDivElement>("#qrHealthBadge");
-  if (!badge) return;
-  const health = getQrHealthBadge({
-    foreground: options.foreground,
-    background: options.background,
-    transparentBackground: options.transparentBackground,
-    margin: options.margin,
-    logoScale: options.logoDataUrl ? options.logoScale : 0,
-    payloadLength,
-  });
-  badge.className = `health-badge health-${health.tone}`;
-  badge.textContent = `${health.label}: ${health.message}`;
-  badge.title = health.warnings.map((warning) => warning.message).join(" ") || health.message;
-}
 function updateMobilePreview(markup: string, statusText: string, state: "ready" | "empty" | "error"): void {
   const dock = document.querySelector<HTMLButtonElement>("#mobilePreviewDock");
   const preview = document.querySelector<HTMLSpanElement>("#mobileQrPreview");
@@ -743,7 +475,6 @@ function updateQr(): void {
     currentSvg = "";
     updateMobilePreview(`<span class="mini-empty">QR</span>`, "Waiting for content", "empty");
     renderWarnings(options, 0);
-    renderHealthBadge(options, 0);
     return;
   }
 
@@ -754,14 +485,12 @@ function updateQr(): void {
     stats.textContent = `Version ${qr.version} | ${qr.size} x ${qr.size} modules | ${currentPayload.length} chars`;
     updateMobilePreview(currentSvg, `${qr.size} x ${qr.size} modules | ${currentPayload.length} chars`, "ready");
     renderWarnings(options, currentPayload.length);
-    renderHealthBadge(options, currentPayload.length);
   } catch (error) {
     currentSvg = "";
     preview.innerHTML = `<div class="empty-state error">This content is too long for a QR code.</div>`;
     stats.textContent = "Data too long";
     updateMobilePreview(`<span class="mini-empty">!</span>`, "Data too long", "error");
     renderWarnings(options, currentPayload.length, [error instanceof Error ? error.message : "QR generation failed"]);
-    renderHealthBadge(options, currentPayload.length);
   }
 }
 
@@ -776,33 +505,13 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function buildCurrentSvgWith(overrides: Partial<QrRenderOptions> = {}): string {
-  const options = { ...getRenderOptions(), ...overrides };
-  return buildSvgFromQr(createQrCode(currentPayload, options.ecc), options);
-}
-
 async function exportCurrent(format: string): Promise<void> {
   if (!currentPayload.trim() || !currentSvg) return;
   const name = safeFileName(currentMode, "sayaqr");
-  const options = getRenderOptions();
-
-  if (format === "copy-svg") {
-    try {
-      await navigator.clipboard.writeText(currentSvg);
-    } catch {
-      downloadBlob(svgBlob(currentSvg), `${name}.svg`);
-    }
-    return;
-  }
-
   if (format === "svg") downloadBlob(svgBlob(currentSvg), `${name}.svg`);
   if (format === "png") downloadBlob(await svgToRasterBlob(currentSvg, "image/png"), `${name}.png`);
-  if (format === "png-transparent") downloadBlob(await svgToRasterBlob(buildCurrentSvgWith({ transparentBackground: true }), "image/png"), `${name}-transparent.png`);
-  if (format === "png-white") downloadBlob(await svgToRasterBlob(buildCurrentSvgWith({ background: "#ffffff", transparentBackground: false }), "image/png"), `${name}-white.png`);
   if (format === "webp") downloadBlob(await svgToRasterBlob(currentSvg, "image/webp"), `${name}.webp`);
-  if (format === "pdf") downloadBlob(qrPdfBlob(currentPayload, options), `${name}.pdf`);
-  if (format === "pdf-print") downloadBlob(qrPdfBlob(currentPayload, { ...options, background: "#ffffff", transparentBackground: false }), `${name}-print.pdf`);
-  if (format === "pdf-sticker") downloadBlob(qrStickerSheetPdfBlob(currentPayload, { ...options, background: "#ffffff", transparentBackground: false }), `${name}-stickers.pdf`);
+  if (format === "pdf") downloadBlob(qrPdfBlob(currentPayload, getRenderOptions()), `${name}.pdf`);
 }
 
 function setMobileExportMenu(open: boolean): void {
@@ -851,7 +560,7 @@ async function exportBatchZip(): Promise<void> {
   button.textContent = "Generating...";
   const options = getRenderOptions();
   const files: ZipInputFile[] = [];
-  const extension = format === "png-transparent" ? "png" : format;
+  const extension = format === "jpeg" ? "jpg" : format;
 
   try {
     for (let index = 0; index < batchData.rows.length; index++) {
@@ -859,19 +568,17 @@ async function exportBatchZip(): Promise<void> {
       const payload = row[contentColumn]?.trim() ?? "";
       if (!payload) continue;
       const baseName = safeFileName(nameColumn ? row[nameColumn] ?? "" : "", `qr-${index + 1}`);
-      const exportOptions = format === "png-transparent" ? { ...options, transparentBackground: true } : options;
       if (format === "svg") {
         files.push({ name: `${baseName}.svg`, data: buildSvgFromQr(createQrCode(payload, options.ecc), options) });
       } else if (format === "pdf") {
         files.push({ name: `${baseName}.pdf`, data: qrPdfBlob(payload, options) });
       } else {
-        const svg = buildSvgFromQr(createQrCode(payload, exportOptions.ecc), exportOptions);
+        const svg = buildSvgFromQr(createQrCode(payload, options.ecc), options);
         const mime = format === "webp" ? "image/webp" : "image/png";
         files.push({ name: `${baseName}.${extension}`, data: await svgToRasterBlob(svg, mime) });
       }
     }
 
-    const { createZip } = await import("./lib/zip");
     downloadBlob(await createZip(files), "sayaqr-batch.zip");
   } finally {
     button.disabled = false;
@@ -889,23 +596,6 @@ function wireEvents(): void {
       return;
     }
 
-    const brandColorButton = target.closest<HTMLElement>("[data-brand-color]");
-    const brandColor = brandColorButton?.dataset.brandColor;
-    if (brandColor) {
-      setColorControl("mainColor", brandColor);
-      updateQr();
-      return;
-    }
-
-    if (target.closest("#saveBrandKit")) {
-      saveCurrentBrandKit();
-      return;
-    }
-
-    if (target.closest("#useBrandPreset")) {
-      useBrandPreset();
-      return;
-    }
     const exportButton = target.closest<HTMLElement>("[data-export]");
     const exportFormat = exportButton?.dataset.export;
     if (exportFormat) {
@@ -929,28 +619,23 @@ function wireEvents(): void {
         return;
       }
 
-
-      if (target.dataset.styleParam && (target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) {
-        updateStyleParam(target);
-        updateQr();
-        return;
-      }
       if (target.id === "colorMode") {
         updateCustomColorPanel();
         updateQr();
         return;
       }
 
-      if (target.id === "mainColor" || target.id === "foreground" || target.id === "background") {
-        syncColorControl(target.id as ColorControlId, "picker");
+      if (target.id === "foreground" || target.id === "background") {
+        syncColorControl(target.id, "picker");
         updateQr();
         return;
       }
 
-      if (target.id === "mainColorHex" || target.id === "foregroundHex" || target.id === "backgroundHex") {
+      if (target.id === "foregroundHex" || target.id === "backgroundHex") {
         if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) updateQr();
         return;
       }
+
       if (target.id !== "csvUpload" && target.id !== "logoUpload") updateQr();
     }
   });
@@ -977,15 +662,6 @@ function wireEvents(): void {
     batchData = parseCsv(await file.text());
     populateBatchSelectors(batchData);
   });
-  document.querySelector<HTMLSelectElement>("#stylePreset")?.addEventListener("change", (event) => {
-    setStylePreset((event.target as HTMLSelectElement).value);
-    updateQr();
-  });
-
-  document.querySelector<HTMLSelectElement>("#templateSelect")?.addEventListener("change", (event) => {
-    applyTemplate((event.target as HTMLSelectElement).value as TemplateId);
-  });
-
   document.querySelector<HTMLSelectElement>("#modeSelect")?.addEventListener("change", (event) => {
     categorySelection = (event.target as HTMLSelectElement).value as CategorySelection;
     const quickValue = document.querySelector<HTMLTextAreaElement>("#autoContent")?.value ?? "";
@@ -1035,9 +711,6 @@ renderApp();
 renderModeTabs();
 renderPayloadFields();
 wireEvents();
-syncColorControl("mainColor", "hex");
-renderStyleControls();
-refreshBrandKitUi();
 updateCustomColorPanel();
 updateQr();
 registerServiceWorker();
