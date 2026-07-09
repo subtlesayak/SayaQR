@@ -30,7 +30,7 @@ export function hexToRgb(hex: string): Rgb | null {
       b: parseInt(cleaned[2] + cleaned[2], 16),
     };
   }
-  if (/^[0-9a-f]{6}$/i.test(cleaned)) {
+  if (/^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(cleaned)) {
     return {
       r: parseInt(cleaned.slice(0, 2), 16),
       g: parseInt(cleaned.slice(2, 4), 16),
