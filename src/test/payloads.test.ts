@@ -43,6 +43,10 @@ describe("QR payload formatting", () => {
       }),
     ).toBe("upi://pay?pa=alice%40upi&pn=Alice%20Rao&am=125.50&cu=INR&tn=Tea%20fund");
   });
+
+  it("formats label-only geo searches", () => {
+    expect(formatPayload("geo", { label: "India Gate" })).toBe("geo:0,0?q=India%20Gate");
+  });
 });
 
 describe("exports", () => {
