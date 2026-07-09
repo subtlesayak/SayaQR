@@ -159,13 +159,24 @@ function renderApp(): void {
           </div>
         </div>
       </div>
-      <button id="mobilePreviewDock" class="mobile-preview-dock" type="button" aria-label="Open QR preview">
-        <span id="mobileQrPreview" class="mobile-qr-preview" aria-hidden="true"></span>
-        <span class="mobile-preview-copy">
-          <strong>Live preview</strong>
-          <span id="mobileQrStatus">Ready</span>
-        </span>
-      </button>
+      <div class="mobile-preview-group">
+        <button id="mobilePreviewDock" class="mobile-preview-dock" type="button" aria-label="Open QR preview">
+          <span id="mobileQrPreview" class="mobile-qr-preview" aria-hidden="true"></span>
+          <span class="mobile-preview-copy">
+            <strong>Live preview</strong>
+            <span id="mobileQrStatus">Ready</span>
+          </span>
+        </button>
+        <div class="mobile-export">
+          <button id="mobileExportToggle" class="mobile-export-toggle" type="button" aria-label="Download QR code" aria-haspopup="true" aria-expanded="false">Download</button>
+          <div id="mobileExportMenu" class="mobile-export-menu" role="menu" hidden>
+            <button type="button" data-export="svg" role="menuitem">SVG</button>
+            <button type="button" data-export="png" role="menuitem">PNG</button>
+            <button type="button" data-export="webp" role="menuitem">WebP</button>
+            <button type="button" data-export="pdf" role="menuitem">PDF</button>
+          </div>
+        </div>
+      </div>
     </header>
     <main class="workspace">
       <section class="tool-surface controls" aria-label="QR controls">
@@ -233,8 +244,8 @@ function renderApp(): void {
         <span>No upload</span>
       </div>
       <p class="footer-credit">
-        Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Sayak</a>.
-        QR encoding by Nayuki's MIT-licensed QR Code generator.
+        Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Subtle Sayak</a>.
+        QR encoding by <a href="https://www.nayuki.io/page/qr-code-generator-library" target="_blank" rel="noreferrer">Nayuki's MIT-licensed QR Code generator</a>.
       </p>
     </footer>
   `;
@@ -436,6 +447,19 @@ async function exportCurrent(format: string): Promise<void> {
   if (format === "pdf") downloadBlob(qrPdfBlob(currentPayload, getRenderOptions()), `${name}.pdf`);
 }
 
+function setMobileExportMenu(open: boolean): void {
+  const toggle = document.querySelector<HTMLButtonElement>("#mobileExportToggle");
+  const menu = document.querySelector<HTMLDivElement>("#mobileExportMenu");
+  if (!toggle || !menu) return;
+  menu.hidden = !open;
+  toggle.setAttribute("aria-expanded", String(open));
+}
+
+function toggleMobileExportMenu(): void {
+  const menu = document.querySelector<HTMLDivElement>("#mobileExportMenu");
+  setMobileExportMenu(Boolean(menu?.hidden));
+}
+
 function populateBatchSelectors(data: CsvData): void {
   const content = document.querySelector<HTMLSelectElement>("#csvContentColumn");
   const names = document.querySelector<HTMLSelectElement>("#csvNameColumn");
@@ -499,12 +523,24 @@ function wireEvents(): void {
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.closest("#mobilePreviewDock")) {
-      document.querySelector("#qrPreview")?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if (target.closest("#mobileExportToggle")) {
+      toggleMobileExportMenu();
       return;
     }
+
     const exportFormat = target.dataset.export;
-    if (exportFormat) void exportCurrent(exportFormat);
+    if (exportFormat) {
+      setMobileExportMenu(false);
+      void exportCurrent(exportFormat);
+      return;
+    }
+
+    if (!target.closest(".mobile-export")) setMobileExportMenu(false);
+
+    if (target.closest("#mobilePreviewDock")) {
+      document.querySelector("#qrPreview")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   });
 
   document.addEventListener("input", (event) => {
