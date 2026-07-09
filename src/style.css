@@ -162,6 +162,7 @@ h2 {
 
 .mode-tabs button,
 .export-row button,
+#autoCategory,
 #exportZip {
   min-height: 40px;
   border-radius: 7px;
@@ -173,6 +174,7 @@ h2 {
 
 .mode-tabs button:hover,
 .export-row button:hover,
+#autoCategory:hover,
 #exportZip:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
@@ -183,11 +185,46 @@ h2 {
   background: #0f172a;
 }
 
+.quick-content {
+  margin-bottom: 12px;
+}
 
+.quick-content textarea {
+  min-height: 78px;
+}
+
+.category-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.category-select {
+  min-width: 0;
+}
+
+#autoCategory {
+  align-self: end;
+  min-height: 42px;
+  padding: 0 16px;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.detect-status {
+  margin: 0 0 14px;
+  color: #5b667a;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
 .payload-grid,
 .design-grid,
 .batch-grid,
 .mode-tabs,
+.category-row,
 .export-row,
 .field,
 .switch,
@@ -465,8 +502,13 @@ input[type="file"] {
   .design-grid,
   .batch-grid,
   .mode-tabs,
+  .category-row,
   .export-row {
     grid-template-columns: 1fr;
+  }
+
+  #autoCategory {
+    width: 100%;
   }
 
   .qr-preview {

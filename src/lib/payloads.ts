@@ -168,8 +168,11 @@ export function formatPayload(mode: QrMode, fields: PayloadFields): string {
       const lat = field(fields, "latitude");
       const lon = field(fields, "longitude");
       const label = field(fields, "label");
-      const base = `geo:${lat},${lon}`;
-      return label ? `${base}?q=${encodeURIComponent(`${lat},${lon}(${label})`)}` : base;
+      if (lat && lon) {
+        const base = `geo:${lat},${lon}`;
+        return label ? `${base}?q=${encodeURIComponent(`${lat},${lon}(${label})`)}` : base;
+      }
+      return label ? `geo:0,0?q=${encodeURIComponent(label)}` : "";
     }
     default: {
       const exhaustive: never = mode;

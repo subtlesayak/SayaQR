@@ -1,4 +1,5 @@
 import "./style.css";
+import { detectQrContent, type DetectionResult } from "./lib/autodetect";
 import { parseCsv, safeFileName, type CsvData } from "./lib/csv";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
@@ -154,7 +155,12 @@ function renderApp(): void {
           <h2>Content</h2>
           <span id="modeHint"></span>
         </div>
-        <div id="modeTabs" class="mode-tabs" role="tablist" aria-label="QR mode"></div>
+        <label class="field field-wide quick-content" for="autoContent"><span>Quick content</span><textarea id="autoContent" rows="3" placeholder="Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates"></textarea></label>
+        <div class="category-row">
+          <label class="field category-select" for="modeSelect"><span>Category</span><select id="modeSelect" aria-label="QR category"></select></label>
+          <button id="autoCategory" type="button">Auto category</button>
+        </div>
+        <p id="autoDetectStatus" class="detect-status" aria-live="polite">Paste content above, then auto-detect its category.</p>
         <form id="payloadForm" class="payload-grid"></form>
 
         <div class="section-heading compact"><h2>Design</h2></div>
@@ -207,12 +213,13 @@ function renderApp(): void {
 }
 
 function renderModeTabs(): void {
-  const tabs = document.querySelector<HTMLDivElement>("#modeTabs");
+  const select = document.querySelector<HTMLSelectElement>("#modeSelect");
   const hint = document.querySelector<HTMLSpanElement>("#modeHint");
-  if (!tabs || !hint) return;
-  tabs.innerHTML = QR_MODES.map(
-    (mode) => `<button type="button" role="tab" aria-selected="${mode.id === currentMode}" class="${mode.id === currentMode ? "active" : ""}" data-mode="${mode.id}">${mode.label}</button>`,
+  if (!select || !hint) return;
+  select.innerHTML = QR_MODES.map(
+    (mode) => `<option value="${mode.id}" ${mode.id === currentMode ? "selected" : ""}>${mode.label}</option>`,
   ).join("");
+  select.value = currentMode;
   hint.textContent = QR_MODES.find((mode) => mode.id === currentMode)?.hint ?? "";
 }
 
@@ -220,6 +227,40 @@ function renderPayloadFields(): void {
   const form = document.querySelector<HTMLFormElement>("#payloadForm");
   if (!form) return;
   form.innerHTML = MODE_FIELDS[currentMode].map(renderField).join("");
+}
+function setPayloadFields(fields: PayloadFields): void {
+  document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("[data-payload-field]").forEach((input) => {
+    const key = input.dataset.payloadField;
+    if (!key || fields[key] === undefined) return;
+    const value = fields[key];
+    if (input instanceof HTMLInputElement && input.type === "checkbox") {
+      input.checked = value === true || value === "true";
+    } else {
+      input.value = String(value ?? "");
+    }
+  });
+}
+
+function updateDetectionStatus(result?: DetectionResult): void {
+  const status = document.querySelector<HTMLParagraphElement>("#autoDetectStatus");
+  const input = document.querySelector<HTMLTextAreaElement>("#autoContent");
+  if (!status || !input) return;
+  const detection = result ?? detectQrContent(input.value);
+  status.textContent = input.value.trim()
+    ? `Looks like ${detection.label}. Confidence: ${detection.confidence}.`
+    : "Paste content above, then auto-detect its category.";
+}
+
+function applyAutoCategory(): void {
+  const input = document.querySelector<HTMLTextAreaElement>("#autoContent");
+  if (!input) return;
+  const detection = detectQrContent(input.value);
+  currentMode = detection.mode;
+  renderModeTabs();
+  renderPayloadFields();
+  setPayloadFields(detection.fields);
+  updateDetectionStatus(detection);
+  updateQr();
 }
 
 function collectPayloadFields(): PayloadFields {
@@ -390,13 +431,6 @@ function wireEvents(): void {
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    const mode = target.dataset.mode as QrMode | undefined;
-    if (mode) {
-      currentMode = mode;
-      renderModeTabs();
-      renderPayloadFields();
-      updateQr();
-    }
     const exportFormat = target.dataset.export;
     if (exportFormat) void exportCurrent(exportFormat);
   });
@@ -404,6 +438,11 @@ function wireEvents(): void {
   document.addEventListener("input", (event) => {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+      if (target.id === "autoContent") {
+        updateDetectionStatus();
+        return;
+      }
+
       if (target.id !== "csvUpload" && target.id !== "logoUpload") updateQr();
     }
   });
@@ -431,6 +470,13 @@ function wireEvents(): void {
     populateBatchSelectors(batchData);
   });
 
+  document.querySelector<HTMLButtonElement>("#autoCategory")?.addEventListener("click", () => applyAutoCategory());
+  document.querySelector<HTMLSelectElement>("#modeSelect")?.addEventListener("change", (event) => {
+    currentMode = (event.target as HTMLSelectElement).value as QrMode;
+    renderModeTabs();
+    renderPayloadFields();
+    updateQr();
+  });
   document.querySelector<HTMLButtonElement>("#exportZip")?.addEventListener("click", () => void exportBatchZip());
 }
 
@@ -458,5 +504,3 @@ renderPayloadFields();
 wireEvents();
 updateQr();
 registerServiceWorker();
-
-
