@@ -486,11 +486,23 @@ function registerServiceWorker(): void {
     if (status) status.textContent = "Offline unavailable";
     return;
   }
+
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let refreshedForUpdate = false;
+  if (hadController) {
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshedForUpdate) return;
+      refreshedForUpdate = true;
+      window.location.reload();
+    });
+  }
+
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`)
-      .then(() => {
+      .then((registration) => {
         if (status) status.textContent = "Offline ready";
+        void registration.update();
       })
       .catch(() => {
         if (status) status.textContent = "Offline pending";
