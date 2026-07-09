@@ -209,6 +209,14 @@ function renderApp(): void {
         <div id="batchPreview" class="batch-preview"></div>
       </section>
     </main>
+
+    <button id="mobilePreviewDock" class="mobile-preview-dock" type="button" aria-label="Open QR preview">
+      <span id="mobileQrPreview" class="mobile-qr-preview" aria-hidden="true"></span>
+      <span class="mobile-preview-copy">
+        <strong>Live preview</strong>
+        <span id="mobileQrStatus">Ready</span>
+      </span>
+    </button>
   `;
 }
 
@@ -315,6 +323,17 @@ function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: 
     .join("");
 }
 
+function updateMobilePreview(markup: string, statusText: string, state: "ready" | "empty" | "error"): void {
+  const dock = document.querySelector<HTMLButtonElement>("#mobilePreviewDock");
+  const preview = document.querySelector<HTMLSpanElement>("#mobileQrPreview");
+  const status = document.querySelector<HTMLSpanElement>("#mobileQrStatus");
+  if (!dock || !preview || !status) return;
+
+  dock.dataset.state = state;
+  preview.innerHTML = markup;
+  status.textContent = statusText;
+}
+
 function updateQr(): void {
   updateSliderLabels();
   const preview = document.querySelector<HTMLDivElement>("#qrPreview");
@@ -330,6 +349,7 @@ function updateQr(): void {
     preview.innerHTML = `<div class="empty-state">Enter content to generate a QR code.</div>`;
     stats.textContent = "Waiting for content";
     currentSvg = "";
+    updateMobilePreview(`<span class="mini-empty">QR</span>`, "Waiting for content", "empty");
     renderWarnings(options, 0);
     return;
   }
@@ -339,11 +359,13 @@ function updateQr(): void {
     currentSvg = buildSvgFromQr(qr, options);
     preview.innerHTML = currentSvg;
     stats.textContent = `Version ${qr.version} | ${qr.size} x ${qr.size} modules | ${currentPayload.length} chars`;
+    updateMobilePreview(currentSvg, `${qr.size} x ${qr.size} modules | ${currentPayload.length} chars`, "ready");
     renderWarnings(options, currentPayload.length);
   } catch (error) {
     currentSvg = "";
     preview.innerHTML = `<div class="empty-state error">This content is too long for a QR code.</div>`;
     stats.textContent = "Data too long";
+    updateMobilePreview(`<span class="mini-empty">!</span>`, "Data too long", "error");
     renderWarnings(options, currentPayload.length, [error instanceof Error ? error.message : "QR generation failed"]);
   }
 }
@@ -431,6 +453,10 @@ function wireEvents(): void {
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    if (target.closest("#mobilePreviewDock")) {
+      document.querySelector("#qrPreview")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     const exportFormat = target.dataset.export;
     if (exportFormat) void exportCurrent(exportFormat);
   });
