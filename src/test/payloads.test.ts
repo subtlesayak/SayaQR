@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatPayload } from "../lib/payloads";
-import { DEFAULT_RENDER_OPTIONS, buildQrSvg } from "../lib/render";
+import { DEFAULT_RENDER_OPTIONS, buildQrSvg, qrPdfBlob, qrStickerSheetPdfBlob, svgBlob } from "../lib/render";
 import { getScannabilityWarnings } from "../lib/scannability";
 
 describe("QR payload formatting", () => {
@@ -57,7 +57,13 @@ describe("exports", () => {
     expect(svg).toContain("<rect");
     expect(svg).toContain("</svg>");
   });
-});
+
+  it("creates export blobs without crashing", () => {
+    const svg = buildQrSvg("hello", DEFAULT_RENDER_OPTIONS);
+    expect(svgBlob(svg).type).toContain("image/svg+xml");
+    expect(qrPdfBlob("hello", DEFAULT_RENDER_OPTIONS).type).toBe("application/pdf");
+    expect(qrStickerSheetPdfBlob("hello", DEFAULT_RENDER_OPTIONS).type).toBe("application/pdf");
+  });});
 
 describe("scannability warnings", () => {
   it("warns when contrast is too low", () => {
@@ -85,6 +91,19 @@ describe("scannability warnings", () => {
 
     expect(warnings.some((warning) => warning.id === "quiet-zone")).toBe(true);
   });
+  it("warns when logo size is too large", () => {
+    const warnings = getScannabilityWarnings({
+      foreground: "#000000",
+      background: "#ffffff",
+      transparentBackground: false,
+      margin: 4,
+      logoScale: 0.31,
+      payloadLength: 20,
+    });
+
+    expect(warnings.some((warning) => warning.id === "logo" && warning.level === "danger")).toBe(true);
+  });
+
   it("supports 8-digit hex colors for contrast checks", () => {
     const warnings = getScannabilityWarnings({
       foreground: "#000000ff",

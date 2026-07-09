@@ -1,4 +1,5 @@
 import { createQrCode, type ErrorCorrectionLevel, type NayukiQrCode } from "./qr";
+import { getStylePreset, type StyleParams } from "./stylePresets";
 
 export type FinderStyle = "square" | "rounded" | "circle";
 
@@ -13,6 +14,8 @@ export interface QrRenderOptions {
   logoDataUrl?: string;
   logoScale: number;
   ecc: ErrorCorrectionLevel;
+  stylePresetId?: string;
+  styleParams?: StyleParams;
 }
 
 export const DEFAULT_RENDER_OPTIONS: QrRenderOptions = {
@@ -25,104 +28,13 @@ export const DEFAULT_RENDER_OPTIONS: QrRenderOptions = {
   finderStyle: "rounded",
   logoScale: 0.18,
   ecc: "HIGH",
+  stylePresetId: "classic",
+  styleParams: {},
 };
 
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function finderOrigins(size: number): Array<{ x: number; y: number }> {
-  return [
-    { x: 0, y: 0 },
-    { x: size - 7, y: 0 },
-    { x: 0, y: size - 7 },
-  ];
-}
-
-function isFinderArea(x: number, y: number, size: number): boolean {
-  return (x < 7 && y < 7) || (x >= size - 7 && y < 7) || (x < 7 && y >= size - 7);
-}
-
-function finderDark(dx: number, dy: number): boolean {
-  const distance = Math.max(Math.abs(dx - 3), Math.abs(dy - 3));
-  return distance !== 2;
-}
-
-function moduleRect(x: number, y: number, options: QrRenderOptions): string {
-  const round = Math.max(0, Math.min(0.48, options.rounded * 0.48));
-  return `<rect x="${x}" y="${y}" width="1" height="1" rx="${round}" ry="${round}"/>`;
-}
-
-function drawFinder(origin: { x: number; y: number }, margin: number, options: QrRenderOptions): string {
-  const x = margin + origin.x;
-  const y = margin + origin.y;
-  const rx = options.finderStyle === "rounded" ? 0.45 : 0;
-
-  if (options.finderStyle === "circle") {
-    const circles: string[] = [];
-    for (let dy = 0; dy < 7; dy++) {
-      for (let dx = 0; dx < 7; dx++) {
-        if (finderDark(dx, dy)) {
-          const radius = dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4 ? 0.53 : 0.43;
-          circles.push(`<circle cx="${x + dx + 0.5}" cy="${y + dy + 0.5}" r="${radius}"/>`);
-        }
-      }
-    }
-    return circles.join("");
-  }
-
-  return [
-    `<rect x="${x}" y="${y}" width="7" height="1" rx="${rx}"/>`,
-    `<rect x="${x}" y="${y + 6}" width="7" height="1" rx="${rx}"/>`,
-    `<rect x="${x}" y="${y + 1}" width="1" height="5" rx="${rx}"/>`,
-    `<rect x="${x + 6}" y="${y + 1}" width="1" height="5" rx="${rx}"/>`,
-    `<rect x="${x + 2}" y="${y + 2}" width="3" height="3" rx="${options.finderStyle === "rounded" ? 0.35 : 0}"/>`,
-  ].join("");
-}
-
 export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): string {
-  const margin = Math.max(0, Math.floor(options.margin));
-  const moduleSize = Math.max(1, Math.floor(options.moduleSize));
-  const totalModules = qr.size + margin * 2;
-  const pixelSize = totalModules * moduleSize;
-  const fg = escapeXml(options.foreground);
-  const bg = escapeXml(options.background);
-  const parts: string[] = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${pixelSize}" height="${pixelSize}" viewBox="0 0 ${totalModules} ${totalModules}" role="img" aria-label="QR code">`,
-  ];
-
-  if (!options.transparentBackground) {
-    parts.push(`<rect width="100%" height="100%" fill="${bg}"/>`);
-  }
-
-  parts.push(`<g fill="${fg}" shape-rendering="geometricPrecision">`);
-  for (let y = 0; y < qr.size; y++) {
-    for (let x = 0; x < qr.size; x++) {
-      if (qr.getModule(x, y) && !isFinderArea(x, y, qr.size)) {
-        parts.push(moduleRect(margin + x, margin + y, options));
-      }
-    }
-  }
-  for (const origin of finderOrigins(qr.size)) {
-    parts.push(drawFinder(origin, margin, options));
-  }
-  parts.push("</g>");
-
-  if (options.logoDataUrl) {
-    const logoSize = Math.max(1, qr.size * Math.max(0.05, Math.min(0.35, options.logoScale)));
-    const logoX = margin + (qr.size - logoSize) / 2;
-    const logoY = margin + (qr.size - logoSize) / 2;
-    const backing = options.transparentBackground ? "#ffffff" : bg;
-    parts.push(`<rect x="${logoX - 0.8}" y="${logoY - 0.8}" width="${logoSize + 1.6}" height="${logoSize + 1.6}" rx="1.4" fill="${backing}"/>`);
-    parts.push(`<image href="${escapeXml(options.logoDataUrl)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`);
-  }
-
-  parts.push("</svg>");
-  return parts.join("");
+  const preset = getStylePreset(options.stylePresetId);
+  return preset.renderSvg(qr, options, options.styleParams ?? preset.defaults);
 }
 
 export function buildQrSvg(payload: string, options: QrRenderOptions): string {
@@ -163,20 +75,46 @@ export async function svgToRasterBlob(svg: string, mimeType: "image/png" | "imag
 }
 
 function colorToRgb(color: string): [number, number, number] {
-  const cleaned = color.replace(/^#/, "");
-  const full = cleaned.length === 3 ? cleaned.split("").map((char) => char + char).join("") : cleaned.slice(0, 6);
-  return [parseInt(full.slice(0, 2), 16) / 255, parseInt(full.slice(2, 4), 16) / 255, parseInt(full.slice(4, 6), 16) / 255];
+  const cleaned = color.trim().replace(/^#/, "");
+  const normalized = cleaned.length === 3 ? cleaned.split("").map((char) => char + char).join("") : cleaned.padEnd(6, "0").slice(0, 6);
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return [Number.isFinite(r) ? r / 255 : 0, Number.isFinite(g) ? g / 255 : 0, Number.isFinite(b) ? b / 255 : 0];
 }
 
 function pdfEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-export function qrPdfBlob(payload: string, options: QrRenderOptions): Blob {
+function pdfFromCommands(commands: string[], pageWidth: number, pageHeight: number, label: string): Blob {
+  const stream = `${commands.join("\n")}\nBT /F1 8 Tf 36 18 Td (${pdfEscape(label)}) Tj ET`;
+  const objects = [
+    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`,
+    `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`,
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
+    `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
+    `5 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`,
+  ];
+
+  let body = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(body.length);
+    body += object;
+  }
+  const xref = body.length;
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= objects.length; i++) body += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([body], { type: "application/pdf" });
+}
+
+function qrPdfCommands(payload: string, options: QrRenderOptions, unitScale: number): { commands: string[]; page: number; qr: NayukiQrCode; unit: number; margin: number; totalModules: number } {
   const qr = createQrCode(payload, options.ecc);
   const margin = Math.max(0, Math.floor(options.margin));
   const totalModules = qr.size + margin * 2;
-  const unit = Math.max(3, Math.floor(options.moduleSize * 0.75));
+  const unit = Math.max(3, Math.floor(options.moduleSize * unitScale));
   const page = totalModules * unit + 72;
   const offset = 36;
   const [fr, fg, fb] = colorToRgb(options.foreground);
@@ -199,29 +137,48 @@ export function qrPdfBlob(payload: string, options: QrRenderOptions): Blob {
     }
   }
   commands.push("Q");
-  commands.push("BT /F1 8 Tf 36 18 Td (Generated locally by SayaQR) Tj ET");
+  return { commands, page, qr, unit, margin, totalModules };
+}
 
-  const stream = commands.join("\n");
-  const objects = [
-    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`,
-    `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`,
-    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page} ${page}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
-    `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
-    `5 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`,
-  ];
+export function qrPdfBlob(payload: string, options: QrRenderOptions): Blob {
+  const { commands, page } = qrPdfCommands(payload, options, 0.75);
+  return pdfFromCommands(commands, page, page, "Generated locally by SayaQR");
+}
 
-  let body = "%PDF-1.4\n";
-  const offsets = [0];
-  for (const object of objects) {
-    offsets.push(body.length);
-    body += object;
+export function qrStickerSheetPdfBlob(payload: string, options: QrRenderOptions): Blob {
+  const qr = createQrCode(payload, options.ecc);
+  const margin = Math.max(0, Math.floor(options.margin));
+  const unit = Math.max(2, Math.floor(options.moduleSize * 0.52));
+  const qrModules = qr.size + margin * 2;
+  const qrSize = qrModules * unit;
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const gapX = 34;
+  const gapY = 44;
+  const startX = 48;
+  const startY = pageHeight - 56 - qrSize;
+  const [fr, fg, fb] = colorToRgb(options.foreground);
+  const commands: string[] = ["q", "1 1 1 rg", `0 0 ${pageWidth} ${pageHeight} re f`];
+
+  for (let copy = 0; copy < 8; copy++) {
+    const col = copy % 2;
+    const row = Math.floor(copy / 2);
+    const offsetX = startX + col * (qrSize + gapX);
+    const offsetY = startY - row * (qrSize + gapY);
+    if (offsetY < 40) continue;
+    commands.push(`0.965 0.975 0.99 rg ${offsetX - 8} ${offsetY - 8} ${qrSize + 16} ${qrSize + 16} re f`);
+    commands.push(`0.83 0.87 0.92 RG ${offsetX - 8} ${offsetY - 8} ${qrSize + 16} ${qrSize + 16} re S`);
+    commands.push(`${fr.toFixed(4)} ${fg.toFixed(4)} ${fb.toFixed(4)} rg`);
+    for (let y = 0; y < qr.size; y++) {
+      for (let x = 0; x < qr.size; x++) {
+        if (qr.getModule(x, y)) {
+          const px = offsetX + (margin + x) * unit;
+          const py = offsetY + (qrModules - margin - y - 1) * unit;
+          commands.push(`${px} ${py} ${unit} ${unit} re f`);
+        }
+      }
+    }
   }
-  const xref = body.length;
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (let i = 1; i <= objects.length; i++) {
-    body += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
-  }
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-
-  return new Blob([body.replace("Generated locally by SayaQR", pdfEscape("Generated locally by SayaQR"))], { type: "application/pdf" });
+  commands.push("Q");
+  return pdfFromCommands(commands, pageWidth, pageHeight, "SayaQR sticker sheet");
 }
