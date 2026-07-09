@@ -85,4 +85,16 @@ describe("scannability warnings", () => {
 
     expect(warnings.some((warning) => warning.id === "quiet-zone")).toBe(true);
   });
+  it("supports 8-digit hex colors for contrast checks", () => {
+    const warnings = getScannabilityWarnings({
+      foreground: "#000000ff",
+      background: "#ffffffff",
+      transparentBackground: false,
+      margin: 4,
+      logoScale: 0,
+      payloadLength: 20,
+    });
+
+    expect(warnings.some((warning) => warning.id === "contrast")).toBe(false);
+  });
 });

@@ -164,7 +164,7 @@ export async function svgToRasterBlob(svg: string, mimeType: "image/png" | "imag
 
 function colorToRgb(color: string): [number, number, number] {
   const cleaned = color.replace(/^#/, "");
-  const full = cleaned.length === 3 ? cleaned.split("").map((char) => char + char).join("") : cleaned;
+  const full = cleaned.length === 3 ? cleaned.split("").map((char) => char + char).join("") : cleaned.slice(0, 6);
   return [parseInt(full.slice(0, 2), 16) / 255, parseInt(full.slice(2, 4), 16) / 255, parseInt(full.slice(4, 6), 16) / 255];
 }
 

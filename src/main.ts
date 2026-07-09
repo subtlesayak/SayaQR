@@ -168,7 +168,7 @@ function renderApp(): void {
           </span>
         </button>
         <div class="mobile-export">
-          <button id="mobileExportToggle" class="mobile-export-toggle" type="button" aria-label="Download QR code" aria-haspopup="true" aria-expanded="false">Download</button>
+          <button id="mobileExportToggle" class="mobile-export-toggle" type="button" aria-label="Download QR code" aria-haspopup="true" aria-expanded="false"><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download</span></button>
           <div id="mobileExportMenu" class="mobile-export-menu" role="menu" hidden>
             <button type="button" data-export="svg" role="menuitem">SVG</button>
             <button type="button" data-export="png" role="menuitem">PNG</button>
@@ -193,9 +193,30 @@ function renderApp(): void {
 
         <div class="section-heading compact"><h2>Design</h2></div>
         <div class="design-grid">
-          <label class="field design-pair"><span>Foreground</span><input id="foreground" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" /></label>
-          <label class="field design-pair"><span>Background</span><input id="background" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" /></label>
-          <label class="switch"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
+          <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="custom">Custom</option></select></label>
+          <div id="customColorPanel" class="custom-color-panel" hidden>
+            <label class="field design-pair color-control" for="foregroundHex">
+              <span>Foreground</span>
+              <span class="color-shell">
+                <span class="color-swatch-wrap">
+                  <input id="foreground" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Foreground color picker" />
+                  <span id="foregroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.foreground}" aria-hidden="true"></span>
+                </span>
+                <input id="foregroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Foreground hex color" />
+              </span>
+            </label>
+            <label class="field design-pair color-control" for="backgroundHex">
+              <span>Background</span>
+              <span class="color-shell">
+                <span class="color-swatch-wrap">
+                  <input id="background" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" aria-label="Background color picker" />
+                  <span id="backgroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.background}" aria-hidden="true"></span>
+                </span>
+                <input id="backgroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.background}" inputmode="text" spellcheck="false" aria-label="Background hex color" />
+              </span>
+            </label>
+            <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
+          </div>
           <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
           <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
           <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
@@ -328,6 +349,51 @@ function updateFromQuickContent(rawValue: string): void {
   updateDetectionStatus(detection);
   updateQr();
 }
+
+type ColorControlId = "foreground" | "background";
+
+function normalizeHexColor(value: string): string | null {
+  const cleaned = value.trim().replace(/^#/, "");
+  if (/^[0-9a-f]{3}$/i.test(cleaned)) {
+    return `#${cleaned.split("").map((char) => char + char).join("")}`.toUpperCase();
+  }
+  if (/^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(cleaned)) {
+    return `#${cleaned}`.toUpperCase();
+  }
+  return null;
+}
+
+function colorPickerValue(color: string): string {
+  return color.slice(0, 7);
+}
+
+function readColorControl(id: ColorControlId, fallback: string): string {
+  const hexInput = document.querySelector<HTMLInputElement>(`#${id}Hex`);
+  const picker = document.querySelector<HTMLInputElement>(`#${id}`);
+  return normalizeHexColor(hexInput?.value ?? "") ?? picker?.value ?? fallback;
+}
+
+function syncColorControl(id: ColorControlId, source: "picker" | "hex"): boolean {
+  const picker = document.querySelector<HTMLInputElement>(`#${id}`);
+  const hexInput = document.querySelector<HTMLInputElement>(`#${id}Hex`);
+  const swatch = document.querySelector<HTMLSpanElement>(`#${id}Swatch`);
+  if (!picker || !hexInput || !swatch) return false;
+
+  const normalized = source === "picker" ? normalizeHexColor(picker.value) : normalizeHexColor(hexInput.value);
+  hexInput.setAttribute("aria-invalid", String(!normalized));
+  if (!normalized) return false;
+
+  picker.value = colorPickerValue(normalized);
+  hexInput.value = normalized;
+  swatch.style.setProperty("--swatch-color", normalized);
+  return true;
+}
+
+function updateCustomColorPanel(): void {
+  const colorMode = document.querySelector<HTMLSelectElement>("#colorMode")?.value ?? "default";
+  const panel = document.querySelector<HTMLDivElement>("#customColorPanel");
+  if (panel) panel.hidden = colorMode !== "custom";
+}
 function collectPayloadFields(): PayloadFields {
   const fields: PayloadFields = {};
   document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("[data-payload-field]").forEach((input) => {
@@ -339,9 +405,10 @@ function collectPayloadFields(): PayloadFields {
 }
 
 function getRenderOptions(): QrRenderOptions {
-  const foreground = document.querySelector<HTMLInputElement>("#foreground")?.value || DEFAULT_RENDER_OPTIONS.foreground;
-  const background = document.querySelector<HTMLInputElement>("#background")?.value || DEFAULT_RENDER_OPTIONS.background;
-  const transparentBackground = document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false;
+  const useCustomColors = document.querySelector<HTMLSelectElement>("#colorMode")?.value === "custom";
+  const foreground = useCustomColors ? readColorControl("foreground", DEFAULT_RENDER_OPTIONS.foreground) : DEFAULT_RENDER_OPTIONS.foreground;
+  const background = useCustomColors ? readColorControl("background", DEFAULT_RENDER_OPTIONS.background) : DEFAULT_RENDER_OPTIONS.background;
+  const transparentBackground = useCustomColors ? (document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false) : false;
   const margin = Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin);
   const moduleSize = Number(document.querySelector<HTMLInputElement>("#moduleSize")?.value ?? DEFAULT_RENDER_OPTIONS.moduleSize);
   const rounded = Number(document.querySelector<HTMLInputElement>("#rounded")?.value ?? DEFAULT_RENDER_OPTIONS.rounded);
@@ -522,14 +589,15 @@ async function exportBatchZip(): Promise<void> {
 function wireEvents(): void {
   document.addEventListener("click", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
+    if (!(target instanceof Element)) return;
 
     if (target.closest("#mobileExportToggle")) {
       toggleMobileExportMenu();
       return;
     }
 
-    const exportFormat = target.dataset.export;
+    const exportButton = target.closest<HTMLElement>("[data-export]");
+    const exportFormat = exportButton?.dataset.export;
     if (exportFormat) {
       setMobileExportMenu(false);
       void exportCurrent(exportFormat);
@@ -548,6 +616,23 @@ function wireEvents(): void {
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
       if (target.id === "autoContent") {
         updateFromQuickContent(target.value);
+        return;
+      }
+
+      if (target.id === "colorMode") {
+        updateCustomColorPanel();
+        updateQr();
+        return;
+      }
+
+      if (target.id === "foreground" || target.id === "background") {
+        syncColorControl(target.id, "picker");
+        updateQr();
+        return;
+      }
+
+      if (target.id === "foregroundHex" || target.id === "backgroundHex") {
+        if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) updateQr();
         return;
       }
 
@@ -626,5 +711,6 @@ renderApp();
 renderModeTabs();
 renderPayloadFields();
 wireEvents();
+updateCustomColorPanel();
 updateQr();
 registerServiceWorker();
