@@ -25,6 +25,21 @@ type FieldConfig = {
   options?: Array<{ value: string; label: string }>;
 };
 
+const AUTO_CATEGORY_VALUE = "auto";
+type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
+
+const QUICK_FIELD_BY_MODE: Record<QrMode, string> = {
+  text: "text",
+  url: "url",
+  wifi: "ssid",
+  email: "email",
+  sms: "phone",
+  phone: "phone",
+  vcard: "fullName",
+  upi: "payeeAddress",
+  event: "title",
+  geo: "label",
+};
 const MODE_FIELDS: Record<QrMode, FieldConfig[]> = {
   text: [{ name: "text", label: "Text", type: "textarea", rows: 6, defaultValue: "Generated locally by SayaQR" }],
   url: [{ name: "url", label: "URL", type: "url", placeholder: "example.com", defaultValue: "https://github.com/subtlesayak/SayaQR" }],
@@ -96,6 +111,7 @@ if (!app) throw new Error("Missing app root");
 const appRoot = app;
 
 let currentMode: QrMode = "url";
+let categorySelection: CategorySelection = AUTO_CATEGORY_VALUE;
 let logoDataUrl = "";
 let currentPayload = "";
 let currentSvg = "";
@@ -135,11 +151,12 @@ function renderField(field: FieldConfig): string {
 function renderApp(): void {
   appRoot.innerHTML = `
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <div>
-          <h1>SayaQR</h1>
-          <p>Offline QR generator</p>
+      <div class="topbar-info">
+        <div class="brand">
+          <div>
+            <h1>SayaQR</h1>
+            <p>Offline QR generator</p>
+          </div>
         </div>
       </div>
       <button id="mobilePreviewDock" class="mobile-preview-dock" type="button" aria-label="Open QR preview">
@@ -149,13 +166,7 @@ function renderApp(): void {
           <span id="mobileQrStatus">Ready</span>
         </span>
       </button>
-      <div class="privacy-strip" aria-label="Privacy guarantees">
-        <span>Generated locally</span>
-        <span>No tracking</span>
-        <span>No upload</span>
-      </div>
     </header>
-
     <main class="workspace">
       <section class="tool-surface controls" aria-label="QR controls">
         <div class="section-heading">
@@ -165,21 +176,20 @@ function renderApp(): void {
         <label class="field field-wide quick-content" for="autoContent"><span>Quick content</span><textarea id="autoContent" rows="3" placeholder="Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates"></textarea></label>
         <div class="category-row">
           <label class="field category-select" for="modeSelect"><span>Category</span><select id="modeSelect" aria-label="QR category"></select></label>
-          <button id="autoCategory" type="button">Auto category</button>
         </div>
         <p id="autoDetectStatus" class="detect-status" aria-live="polite">Paste content above, then auto-detect its category.</p>
         <form id="payloadForm" class="payload-grid"></form>
 
         <div class="section-heading compact"><h2>Design</h2></div>
         <div class="design-grid">
-          <label class="field"><span>Foreground</span><input id="foreground" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" /></label>
-          <label class="field"><span>Background</span><input id="background" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" /></label>
+          <label class="field design-pair"><span>Foreground</span><input id="foreground" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" /></label>
+          <label class="field design-pair"><span>Background</span><input id="background" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" /></label>
           <label class="switch"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
           <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
           <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
           <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
-          <label class="field"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
-          <label class="field"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
+          <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
+          <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
           <label class="field field-wide"><span>Center logo</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
           <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
         </div>
@@ -216,7 +226,17 @@ function renderApp(): void {
         <div id="batchPreview" class="batch-preview"></div>
       </section>
     </main>
-
+    <footer class="site-footer">
+      <div class="footer-privacy" aria-label="Privacy guarantees">
+        <span>Generated locally</span>
+        <span>No tracking</span>
+        <span>No upload</span>
+      </div>
+      <p class="footer-credit">
+        Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Sayak</a>.
+        QR encoding by Nayuki's MIT-licensed QR Code generator.
+      </p>
+    </footer>
   `;
 }
 
@@ -224,13 +244,16 @@ function renderModeTabs(): void {
   const select = document.querySelector<HTMLSelectElement>("#modeSelect");
   const hint = document.querySelector<HTMLSpanElement>("#modeHint");
   if (!select || !hint) return;
-  select.innerHTML = QR_MODES.map(
-    (mode) => `<option value="${mode.id}" ${mode.id === currentMode ? "selected" : ""}>${mode.label}</option>`,
+  const options = QR_MODES.map(
+    (mode) => `<option value="${mode.id}" ${mode.id === categorySelection ? "selected" : ""}>${mode.label}</option>`,
   ).join("");
-  select.value = currentMode;
-  hint.textContent = QR_MODES.find((mode) => mode.id === currentMode)?.hint ?? "";
+  select.innerHTML = `<option value="${AUTO_CATEGORY_VALUE}" ${categorySelection === AUTO_CATEGORY_VALUE ? "selected" : ""}>Auto category</option>${options}`;
+  select.value = categorySelection;
+  hint.textContent =
+    categorySelection === AUTO_CATEGORY_VALUE
+      ? `Auto-detecting as ${QR_MODES.find((mode) => mode.id === currentMode)?.label ?? "Plain text"}`
+      : QR_MODES.find((mode) => mode.id === currentMode)?.hint ?? "";
 }
-
 function renderPayloadFields(): void {
   const form = document.querySelector<HTMLFormElement>("#payloadForm");
   if (!form) return;
@@ -259,10 +282,19 @@ function updateDetectionStatus(result?: DetectionResult): void {
     : "Paste content above, then auto-detect its category.";
 }
 
-function applyAutoCategory(): void {
-  const input = document.querySelector<HTMLTextAreaElement>("#autoContent");
-  if (!input) return;
-  const detection = detectQrContent(input.value);
+function quickFieldsForMode(mode: QrMode, rawValue: string, detection: DetectionResult): PayloadFields {
+  if (detection.mode === mode) return detection.fields;
+
+  const fields: PayloadFields = { [QUICK_FIELD_BY_MODE[mode]]: rawValue.trim() };
+  if (mode === "wifi") {
+    fields.auth = "WPA";
+    fields.hidden = false;
+  }
+  if (mode === "upi") fields.currency = "INR";
+  return fields;
+}
+
+function applyDetectionResult(detection: DetectionResult): void {
   currentMode = detection.mode;
   renderModeTabs();
   renderPayloadFields();
@@ -271,6 +303,20 @@ function applyAutoCategory(): void {
   updateQr();
 }
 
+function updateFromQuickContent(rawValue: string): void {
+  const detection = detectQrContent(rawValue);
+  if (categorySelection === AUTO_CATEGORY_VALUE) {
+    applyDetectionResult(detection);
+    return;
+  }
+
+  currentMode = categorySelection;
+  renderModeTabs();
+  renderPayloadFields();
+  setPayloadFields(quickFieldsForMode(currentMode, rawValue, detection));
+  updateDetectionStatus(detection);
+  updateQr();
+}
 function collectPayloadFields(): PayloadFields {
   const fields: PayloadFields = {};
   document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("[data-payload-field]").forEach((input) => {
@@ -465,7 +511,7 @@ function wireEvents(): void {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
       if (target.id === "autoContent") {
-        updateDetectionStatus();
+        updateFromQuickContent(target.value);
         return;
       }
 
@@ -495,10 +541,14 @@ function wireEvents(): void {
     batchData = parseCsv(await file.text());
     populateBatchSelectors(batchData);
   });
-
-  document.querySelector<HTMLButtonElement>("#autoCategory")?.addEventListener("click", () => applyAutoCategory());
   document.querySelector<HTMLSelectElement>("#modeSelect")?.addEventListener("change", (event) => {
-    currentMode = (event.target as HTMLSelectElement).value as QrMode;
+    categorySelection = (event.target as HTMLSelectElement).value as CategorySelection;
+    const quickValue = document.querySelector<HTMLTextAreaElement>("#autoContent")?.value ?? "";
+    if (quickValue.trim()) {
+      updateFromQuickContent(quickValue);
+      return;
+    }
+    if (categorySelection !== AUTO_CATEGORY_VALUE) currentMode = categorySelection;
     renderModeTabs();
     renderPayloadFields();
     updateQr();
