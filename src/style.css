@@ -121,6 +121,8 @@ h2 {
 }
 
 .tool-surface {
+  min-width: 0;
+  max-width: 100%;
   background: #ffffff;
   border: 1px solid #dde3ee;
   border-radius: 8px;
@@ -140,6 +142,7 @@ h2 {
 .section-heading,
 .preview-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: start;
   justify-content: space-between;
   gap: 14px;
@@ -180,6 +183,23 @@ h2 {
   background: #0f172a;
 }
 
+
+.payload-grid,
+.design-grid,
+.batch-grid,
+.mode-tabs,
+.export-row,
+.field,
+.switch,
+.payload-output,
+.section-heading > *,
+.preview-header > *,
+input,
+select,
+textarea,
+button {
+  min-width: 0;
+}
 .payload-grid,
 .design-grid,
 .batch-grid {
@@ -426,6 +446,12 @@ input[type="file"] {
 }
 
 @media (max-width: 720px) {
+  .controls,
+  .preview-zone,
+  .batch-zone {
+    padding: 14px;
+  }
+
   .topbar {
     align-items: stretch;
     flex-direction: column;
@@ -448,3 +474,5 @@ input[type="file"] {
     padding: 12px;
   }
 }
+
+
