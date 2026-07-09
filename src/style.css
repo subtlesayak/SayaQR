@@ -166,8 +166,13 @@ h2 {
   padding: 18px;
 }
 
+.preview-zone {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
 .batch-zone {
-  grid-column: 1 / -1;
+  grid-column: 1;
 }
 
 .section-heading,
@@ -605,6 +610,12 @@ input[type="file"] {
 @media (max-width: 1040px) {
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .preview-zone,
+  .batch-zone {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .preview-zone {
