@@ -486,34 +486,47 @@ input[type="file"] {
 }
 
 @media (max-width: 720px) {
-  body {
-    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  .topbar {
+    gap: 10px;
+    padding: 12px 16px;
   }
 
+  .privacy-strip {
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .privacy-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .privacy-strip span,
+  .status-pill {
+    padding: 5px 8px;
+    font-size: 0.74rem;
+  }
   .mobile-preview-dock {
-    position: fixed;
-    left: 12px;
-    right: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
-    z-index: 30;
+    width: 100%;
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 78px;
-    padding: 8px 10px;
+    min-height: 64px;
+    padding: 7px 9px;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.96);
+    background: #fbfcff;
     color: #172033;
-    box-shadow: 0 14px 38px rgba(15, 23, 42, 0.2);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
     text-align: left;
-    backdrop-filter: blur(14px);
   }
 
   .mobile-qr-preview {
-    flex: 0 0 62px;
-    width: 62px;
-    height: 62px;
+    flex: 0 0 50px;
+    width: 50px;
+    height: 50px;
     display: grid;
     place-items: center;
     overflow: hidden;
@@ -524,8 +537,8 @@ input[type="file"] {
 
   .mobile-qr-preview svg {
     display: block;
-    width: 56px;
-    height: 56px;
+    width: 46px;
+    height: 46px;
   }
 
   .mobile-preview-copy {

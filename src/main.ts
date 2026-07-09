@@ -142,6 +142,13 @@ function renderApp(): void {
           <p>Offline QR generator</p>
         </div>
       </div>
+      <button id="mobilePreviewDock" class="mobile-preview-dock" type="button" aria-label="Open QR preview">
+        <span id="mobileQrPreview" class="mobile-qr-preview" aria-hidden="true"></span>
+        <span class="mobile-preview-copy">
+          <strong>Live preview</strong>
+          <span id="mobileQrStatus">Ready</span>
+        </span>
+      </button>
       <div class="privacy-strip" aria-label="Privacy guarantees">
         <span>Generated locally</span>
         <span>No tracking</span>
@@ -210,13 +217,6 @@ function renderApp(): void {
       </section>
     </main>
 
-    <button id="mobilePreviewDock" class="mobile-preview-dock" type="button" aria-label="Open QR preview">
-      <span id="mobileQrPreview" class="mobile-qr-preview" aria-hidden="true"></span>
-      <span class="mobile-preview-copy">
-        <strong>Live preview</strong>
-        <span id="mobileQrStatus">Ready</span>
-      </span>
-    </button>
   `;
 }
 
