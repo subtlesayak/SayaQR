@@ -464,12 +464,17 @@ input[type="file"] {
 .preview-zone {
   position: sticky;
   top: 106px;
+  height: calc(100vh - 124px);
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  overflow: hidden;
 }
 
 .qr-preview {
   display: grid;
   place-items: center;
-  min-height: 420px;
+  min-height: 0;
   border: 1px solid #d9e0ea;
   border-radius: 8px;
   background:
@@ -488,7 +493,7 @@ input[type="file"] {
   display: block;
   width: min(100%, 520px);
   height: auto;
-  max-height: 62vh;
+  max-height: 100%;
 }
 
 .empty-state {
@@ -504,7 +509,9 @@ input[type="file"] {
 .warnings {
   display: grid;
   gap: 8px;
-  margin: 14px 0;
+  max-height: 108px;
+  margin: 12px 0;
+  overflow: auto;
 }
 
 .warning {
@@ -538,7 +545,8 @@ input[type="file"] {
 }
 
 .payload-output textarea {
-  min-height: 112px;
+  min-height: 88px;
+  max-height: 120px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 0.82rem;
 }
@@ -619,6 +627,10 @@ input[type="file"] {
   }
 
   .preview-zone {
+    height: auto;
+    min-height: 0;
+    display: block;
+    overflow: visible;
     position: static;
   }
 }
