@@ -138,6 +138,12 @@ h2 {
   color: #0f172a;
 }
 
+.footer-version {
+  color: #718096;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
 .brand p {
   font-size: 0.95rem;
   font-weight: 650;

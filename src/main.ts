@@ -26,6 +26,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
+const APP_VERSION = "1.0.1";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -283,6 +284,7 @@ function renderApp(): void {
         Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Subtle Sayak</a>.
         QR encoding by <a href="https://www.nayuki.io/page/qr-code-generator-library" target="_blank" rel="noreferrer">Nayuki's MIT-licensed QR Code generator</a>.
       </p>
+      <p class="footer-version">SayaQR v${APP_VERSION}</p>
     </footer>
   `;
 }
