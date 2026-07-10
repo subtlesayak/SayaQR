@@ -28,6 +28,20 @@ type FieldConfig = {
 const AUTO_CATEGORY_VALUE = "auto";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
+const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
+const QUICK_CONTENT_PLACEHOLDERS: Record<QrMode, string> = {
+  text: "Type plain text, notes, serial numbers, or any short message",
+  url: "example.com/path or https://example.com/path",
+  wifi: "WIFI:T:WPA;S:Network name;P:password;; or just the network name",
+  email: "name@example.com or mailto:name@example.com?subject=Hello",
+  sms: "+15551234567 or SMSTO:+15551234567:Message",
+  phone: "+15551234567 or tel:+15551234567",
+  vcard: "Paste a vCard or start with a contact name",
+  upi: "name@bank or upi://pay?pa=name@bank&pn=Name&am=250",
+  event: "Meeting title or BEGIN:VEVENT calendar text",
+  geo: "28.6139,77.2090 or a Google/Apple Maps location link",
+};
+
 const QUICK_FIELD_BY_MODE: Record<QrMode, string> = {
   text: "text",
   url: "url",
@@ -184,7 +198,7 @@ function renderApp(): void {
           <h2>Content</h2>
           <span id="modeHint"></span>
         </div>
-        <label class="field field-wide quick-content" for="autoContent"><span>Quick content</span><textarea id="autoContent" rows="3" placeholder="Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates"></textarea></label>
+        <label class="field field-wide quick-content" for="autoContent"><span>Quick content</span><textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}"></textarea></label>
         <div class="category-row">
           <label class="field category-select" for="modeSelect"><span>Category</span><select id="modeSelect" aria-label="QR category"></select></label>
         </div>
@@ -272,6 +286,15 @@ function renderApp(): void {
   `;
 }
 
+function quickContentPlaceholder(): string {
+  return categorySelection === AUTO_CATEGORY_VALUE ? DEFAULT_QUICK_CONTENT_PLACEHOLDER : QUICK_CONTENT_PLACEHOLDERS[categorySelection];
+}
+
+function updateQuickContentPlaceholder(): void {
+  const input = document.querySelector<HTMLTextAreaElement>("#autoContent");
+  if (input) input.placeholder = quickContentPlaceholder();
+}
+
 function renderModeTabs(): void {
   const select = document.querySelector<HTMLSelectElement>("#modeSelect");
   const hint = document.querySelector<HTMLSpanElement>("#modeHint");
@@ -285,6 +308,7 @@ function renderModeTabs(): void {
     categorySelection === AUTO_CATEGORY_VALUE
       ? `Auto-detecting as ${QR_MODES.find((mode) => mode.id === currentMode)?.label ?? "Plain text"}`
       : QR_MODES.find((mode) => mode.id === currentMode)?.hint ?? "";
+  updateQuickContentPlaceholder();
 }
 function renderPayloadFields(): void {
   const form = document.querySelector<HTMLFormElement>("#payloadForm");
