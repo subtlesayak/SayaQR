@@ -39,7 +39,7 @@ const QUICK_CONTENT_PLACEHOLDERS: Record<QrMode, string> = {
   vcard: "Paste a vCard or start with a contact name",
   upi: "name@bank or upi://pay?pa=name@bank&pn=Name&am=250",
   event: "Meeting title or BEGIN:VEVENT calendar text",
-  geo: "28.6139,77.2090 or a Google/Apple Maps location link",
+  geo: "28.6139,77.2090 or a full Google/Apple Maps link with coordinates",
 };
 
 const QUICK_FIELD_BY_MODE: Record<QrMode, string> = {
@@ -333,6 +333,13 @@ function updateDetectionStatus(result?: DetectionResult): void {
   const input = document.querySelector<HTMLTextAreaElement>("#autoContent");
   if (!status || !input) return;
   const detection = result ?? detectQrContent(input.value);
+  if (categorySelection === "geo" && detection.mode === "url") {
+    const isShortMapLink = /^(https?:\/\/)?(maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(input.value.trim());
+    status.textContent = isShortMapLink
+      ? "Short map links cannot be resolved offline. Paste a full link with coordinates or use URL."
+      : "Geo needs coordinates or a searchable place label. Use URL for web links.";
+    return;
+  }
   status.textContent = input.value.trim()
     ? `Looks like ${detection.label}. Confidence: ${detection.confidence}.`
     : "Paste content above, then auto-detect its category.";
@@ -340,6 +347,10 @@ function updateDetectionStatus(result?: DetectionResult): void {
 
 function quickFieldsForMode(mode: QrMode, rawValue: string, detection: DetectionResult): PayloadFields {
   if (detection.mode === mode) return detection.fields;
+
+  if (mode === "geo" && detection.mode === "url") {
+    return {};
+  }
 
   const fields: PayloadFields = { [QUICK_FIELD_BY_MODE[mode]]: rawValue.trim() };
   if (mode === "wifi") {
