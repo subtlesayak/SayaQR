@@ -130,6 +130,7 @@ let logoDataUrl = "";
 let currentPayload = "";
 let currentSvg = "";
 let batchData: CsvData | null = null;
+let pendingQrFrame = 0;
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -297,28 +298,55 @@ function updateQuickContentPlaceholder(): void {
 
 function renderModeTabs(): void {
   const select = document.querySelector<HTMLSelectElement>("#modeSelect");
-  const hint = document.querySelector<HTMLSpanElement>("#modeHint");
-  if (!select || !hint) return;
+  if (!select) return;
   const options = QR_MODES.map(
-    (mode) => `<option value="${mode.id}" ${mode.id === categorySelection ? "selected" : ""}>${mode.label}</option>`,
+    (mode) => `<option value="${mode.id}" ${mode.id === categorySelection ? "selected" : ""}>${escapeHtml(mode.label)}</option>`,
   ).join("");
   select.innerHTML = `<option value="${AUTO_CATEGORY_VALUE}" ${categorySelection === AUTO_CATEGORY_VALUE ? "selected" : ""}>Auto category</option>${options}`;
   select.value = categorySelection;
+  updateModeHint();
+  updateQuickContentPlaceholder();
+}
+
+function updateModeHint(): void {
+  const hint = document.querySelector<HTMLSpanElement>("#modeHint");
+  if (!hint) return;
   hint.textContent =
     categorySelection === AUTO_CATEGORY_VALUE
       ? `Auto-detecting as ${QR_MODES.find((mode) => mode.id === currentMode)?.label ?? "Plain text"}`
       : QR_MODES.find((mode) => mode.id === currentMode)?.hint ?? "";
-  updateQuickContentPlaceholder();
 }
 function renderPayloadFields(): void {
   const form = document.querySelector<HTMLFormElement>("#payloadForm");
   if (!form) return;
   form.innerHTML = MODE_FIELDS[currentMode].map(renderField).join("");
 }
-function setPayloadFields(fields: PayloadFields): void {
+
+function syncPayloadMode(mode: QrMode): void {
+  const modeChanged = currentMode !== mode;
+  currentMode = mode;
+  if (modeChanged) {
+    renderModeTabs();
+    renderPayloadFields();
+    return;
+  }
+  updateModeHint();
+  updateQuickContentPlaceholder();
+}
+
+function setPayloadFields(fields: PayloadFields, clearMissing = false): void {
   document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("[data-payload-field]").forEach((input) => {
     const key = input.dataset.payloadField;
-    if (!key || fields[key] === undefined) return;
+    if (!key) return;
+    if (fields[key] === undefined) {
+      if (!clearMissing) return;
+      if (input instanceof HTMLInputElement && input.type === "checkbox") {
+        input.checked = false;
+      } else {
+        input.value = "";
+      }
+      return;
+    }
     const value = fields[key];
     if (input instanceof HTMLInputElement && input.type === "checkbox") {
       input.checked = value === true || value === "true";
@@ -362,12 +390,10 @@ function quickFieldsForMode(mode: QrMode, rawValue: string, detection: Detection
 }
 
 function applyDetectionResult(detection: DetectionResult): void {
-  currentMode = detection.mode;
-  renderModeTabs();
-  renderPayloadFields();
-  setPayloadFields(detection.fields);
+  syncPayloadMode(detection.mode);
+  setPayloadFields(detection.fields, true);
   updateDetectionStatus(detection);
-  updateQr();
+  scheduleQrUpdate();
 }
 
 function updateFromQuickContent(rawValue: string): void {
@@ -377,12 +403,10 @@ function updateFromQuickContent(rawValue: string): void {
     return;
   }
 
-  currentMode = categorySelection;
-  renderModeTabs();
-  renderPayloadFields();
-  setPayloadFields(quickFieldsForMode(currentMode, rawValue, detection));
+  syncPayloadMode(categorySelection);
+  setPayloadFields(quickFieldsForMode(currentMode, rawValue, detection), true);
   updateDetectionStatus(detection);
-  updateQr();
+  scheduleQrUpdate();
 }
 
 type ColorControlId = "foreground" | "background";
@@ -529,6 +553,14 @@ function updateQr(): void {
   }
 }
 
+function scheduleQrUpdate(): void {
+  if (pendingQrFrame) return;
+  pendingQrFrame = window.requestAnimationFrame(() => {
+    pendingQrFrame = 0;
+    updateQr();
+  });
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -656,22 +688,22 @@ function wireEvents(): void {
 
       if (target.id === "colorMode") {
         updateCustomColorPanel();
-        updateQr();
+        scheduleQrUpdate();
         return;
       }
 
       if (target.id === "foreground" || target.id === "background") {
         syncColorControl(target.id, "picker");
-        updateQr();
+        scheduleQrUpdate();
         return;
       }
 
       if (target.id === "foregroundHex" || target.id === "backgroundHex") {
-        if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) updateQr();
+        if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) scheduleQrUpdate();
         return;
       }
 
-      if (target.id !== "csvUpload" && target.id !== "logoUpload") updateQr();
+      if (target.id !== "csvUpload" && target.id !== "logoUpload") scheduleQrUpdate();
     }
   });
 
@@ -680,13 +712,13 @@ function wireEvents(): void {
     const file = input.files?.[0];
     if (!file) {
       logoDataUrl = "";
-      updateQr();
+      scheduleQrUpdate();
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       logoDataUrl = String(reader.result ?? "");
-      updateQr();
+      scheduleQrUpdate();
     };
     reader.readAsDataURL(file);
   });
@@ -707,7 +739,7 @@ function wireEvents(): void {
     if (categorySelection !== AUTO_CATEGORY_VALUE) currentMode = categorySelection;
     renderModeTabs();
     renderPayloadFields();
-    updateQr();
+    scheduleQrUpdate();
   });
   document.querySelector<HTMLButtonElement>("#exportZip")?.addEventListener("click", () => void exportBatchZip());
 }
