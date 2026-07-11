@@ -4,6 +4,7 @@ import { parseCsv, safeFileName, type CsvData } from "./lib/csv";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
 import { getScannabilityWarnings } from "./lib/scannability";
+import { detectLogoPresetFromText, getLogoPreset, LOGO_PRESETS, logoPresetToDataUrl, type LogoPresetId } from "./lib/logo-presets";
 import {
   buildSvgFromQr,
   DEFAULT_RENDER_OPTIONS,
@@ -26,7 +27,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.2";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -128,6 +129,9 @@ const appRoot = app;
 let currentMode: QrMode = "url";
 let categorySelection: CategorySelection = AUTO_CATEGORY_VALUE;
 let logoDataUrl = "";
+let logoSelection: LogoPresetId | "custom" | "none" = "none";
+let logoAutoApplied = false;
+let logoAutoSuppressedFor = "";
 let currentPayload = "";
 let currentSvg = "";
 let batchData: CsvData | null = null;
@@ -162,6 +166,13 @@ function renderField(field: FieldConfig): string {
   }
 
   return `<label class="field" for="${fieldId(field.name)}"><span>${field.label}</span><input id="${fieldId(field.name)}" data-payload-field="${field.name}" type="${field.type}" value="${escapeHtml(value)}"${placeholder}/></label>`;
+}
+
+function renderLogoPresetButtons(): string {
+  return LOGO_PRESETS.map((preset) => {
+    const active = logoSelection === preset.id;
+    return `<button class="logo-preset" type="button" data-logo-preset="${preset.id}" aria-pressed="${active}" title="${escapeHtml(preset.label)}"><span class="logo-preset-icon">${preset.svg}</span><span>${escapeHtml(preset.name)}</span></button>`;
+  }).join("");
 }
 
 function renderApp(): void {
@@ -238,7 +249,14 @@ function renderApp(): void {
           <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
           <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
           <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
-          <label class="field field-wide"><span>Center logo</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
+          <div class="field field-wide logo-picker">
+            <div class="logo-picker-header">
+              <span>Center logo</span>
+              <button id="clearLogo" class="clear-logo-button" type="button" aria-pressed="${logoSelection === "none"}">None</button>
+            </div>
+            <div id="logoPresetGrid" class="logo-preset-grid" aria-label="Logo presets">${renderLogoPresetButtons()}</div>
+            <label class="logo-upload-field"><span>Upload custom</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
+          </div>
           <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
         </div>
       </section>
@@ -399,6 +417,7 @@ function applyDetectionResult(detection: DetectionResult): void {
 }
 
 function updateFromQuickContent(rawValue: string): void {
+  syncLogoFromQuickContent(rawValue);
   const detection = detectQrContent(rawValue);
   if (categorySelection === AUTO_CATEGORY_VALUE) {
     applyDetectionResult(detection);
@@ -454,6 +473,50 @@ function updateCustomColorPanel(): void {
   const colorMode = document.querySelector<HTMLSelectElement>("#colorMode")?.value ?? "default";
   const panel = document.querySelector<HTMLDivElement>("#customColorPanel");
   if (panel) panel.hidden = colorMode !== "custom";
+}
+
+function updateLogoPresetState(): void {
+  const grid = document.querySelector<HTMLDivElement>("#logoPresetGrid");
+  if (grid) grid.innerHTML = renderLogoPresetButtons();
+  document.querySelector<HTMLButtonElement>("#clearLogo")?.setAttribute("aria-pressed", String(logoSelection === "none"));
+}
+
+function applyLogoPreset(presetId: LogoPresetId, auto: boolean): void {
+  const preset = getLogoPreset(presetId);
+  if (!preset) return;
+  logoDataUrl = logoPresetToDataUrl(preset);
+  logoSelection = preset.id;
+  logoAutoApplied = auto;
+  if (!auto) logoAutoSuppressedFor = "";
+  const upload = document.querySelector<HTMLInputElement>("#logoUpload");
+  if (upload) upload.value = "";
+  updateLogoPresetState();
+}
+
+function clearCenterLogo(suppressAuto = false): void {
+  logoDataUrl = "";
+  logoSelection = "none";
+  logoAutoApplied = false;
+  logoAutoSuppressedFor = suppressAuto ? (document.querySelector<HTMLTextAreaElement>("#autoContent")?.value.trim() ?? "") : "";
+  const upload = document.querySelector<HTMLInputElement>("#logoUpload");
+  if (upload) upload.value = "";
+  updateLogoPresetState();
+  scheduleQrUpdate();
+}
+
+function syncLogoFromQuickContent(rawValue: string): void {
+  const value = rawValue.trim();
+  if (logoSelection === "custom" || (!logoAutoApplied && logoSelection !== "none")) return;
+  if (logoAutoSuppressedFor && value === logoAutoSuppressedFor) return;
+  if (logoAutoSuppressedFor && value !== logoAutoSuppressedFor) logoAutoSuppressedFor = "";
+
+  const preset = detectLogoPresetFromText(value);
+  if (preset) {
+    applyLogoPreset(preset.id, true);
+    return;
+  }
+
+  if (logoAutoApplied) clearCenterLogo(false);
 }
 function collectPayloadFields(): PayloadFields {
   const fields: PayloadFields = {};
@@ -678,6 +741,21 @@ function wireEvents(): void {
     if (target.closest("#mobilePreviewDock")) {
       document.querySelector("#qrPreview")?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
+
+    const logoPreset = target.closest<HTMLButtonElement>("[data-logo-preset]");
+    if (logoPreset) {
+      const preset = getLogoPreset(logoPreset.dataset.logoPreset);
+      if (preset) {
+        applyLogoPreset(preset.id, false);
+        scheduleQrUpdate();
+      }
+      return;
+    }
+
+    if (target.closest("#clearLogo")) {
+      clearCenterLogo(true);
+      return;
+    }
   });
 
   document.addEventListener("input", (event) => {
@@ -705,6 +783,11 @@ function wireEvents(): void {
         return;
       }
 
+      const payloadField = target.getAttribute("data-payload-field");
+      if (payloadField === "url" || payloadField === "website" || payloadField === "payeeAddress") {
+        syncLogoFromQuickContent(target.value);
+      }
+
       if (target.id !== "csvUpload" && target.id !== "logoUpload") scheduleQrUpdate();
     }
   });
@@ -713,13 +796,16 @@ function wireEvents(): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) {
-      logoDataUrl = "";
-      scheduleQrUpdate();
+      clearCenterLogo(true);
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       logoDataUrl = String(reader.result ?? "");
+      logoSelection = "custom";
+      logoAutoApplied = false;
+      logoAutoSuppressedFor = "";
+      updateLogoPresetState();
       scheduleQrUpdate();
     };
     reader.readAsDataURL(file);
@@ -783,3 +869,6 @@ wireEvents();
 updateCustomColorPanel();
 updateQr();
 registerServiceWorker();
+
+
+
