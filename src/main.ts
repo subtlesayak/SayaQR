@@ -4,7 +4,7 @@ import { parseCsv, safeFileName, type CsvData } from "./lib/csv";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
 import { getScannabilityWarnings } from "./lib/scannability";
-import { detectLogoPresetFromText, getLogoPreset, LOGO_PRESETS, logoPresetToDataUrl, type LogoPresetId } from "./lib/logo-presets";
+import { detectLogoPresetFromText, getLogoMismatchWarning, getLogoPreset, LOGO_PRESETS, logoPresetToDataUrl, type LogoPresetId } from "./lib/logo-presets";
 import {
   buildSvgFromQr,
   DEFAULT_RENDER_OPTIONS,
@@ -27,7 +27,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.0.5";
+const APP_VERSION = "1.6";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -584,7 +584,12 @@ function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: 
     payloadLength,
   });
 
-  warnings.innerHTML = [...items.map((item) => ({ level: item.level, message: item.message })), ...extra.map((message) => ({ level: "danger", message }))]
+  const renderedItems = items.map((item) => ({ level: item.level, message: item.message }));
+  const logoWarning = getLogoMismatchWarning(logoSelection, currentPayload);
+  if (logoWarning) renderedItems.push({ level: "warning", message: logoWarning });
+  for (const message of extra) renderedItems.push({ level: "danger", message });
+
+  warnings.innerHTML = renderedItems
     .map((item) => `<div class="warning ${item.level}">${escapeHtml(item.message)}</div>`)
     .join("");
 }

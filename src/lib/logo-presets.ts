@@ -154,6 +154,16 @@ export function detectLogoPresetFromText(input: string): LogoPreset | undefined 
   return undefined;
 }
 
+export function getLogoMismatchWarning(selectedId: string | undefined, input: string): string | null {
+  const selected = getLogoPreset(selectedId);
+  if (!selected || !input.trim()) return null;
+
+  const detected = detectLogoPresetFromText(input);
+  if (detected?.id === selected.id) return null;
+  if (detected) return selected.name + " logo does not match the detected " + detected.name + " link.";
+  return selected.name + " logo does not match this QR content.";
+}
+
 export function logoPresetToDataUrl(preset: LogoPreset): string {
   return `data:image/svg+xml,${encodeURIComponent(preset.svg)}`;
 }
