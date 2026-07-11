@@ -27,7 +27,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.0.4";
+const APP_VERSION = "1.0.5";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -228,7 +228,7 @@ function renderApp(): void {
 
         <div class="section-heading compact"><h2>Design</h2></div>
         <div class="design-grid">
-          <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="custom">Custom</option></select></label>
+          <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
           <div id="customColorPanel" class="custom-color-panel" hidden>
             <label class="field design-pair color-control" for="foregroundHex">
               <span>Foreground</span>
@@ -541,8 +541,14 @@ function collectPayloadFields(): PayloadFields {
 }
 
 function getRenderOptions(): QrRenderOptions {
-  const useCustomColors = document.querySelector<HTMLSelectElement>("#colorMode")?.value === "custom";
-  const foreground = useCustomColors ? readColorControl("foreground", DEFAULT_RENDER_OPTIONS.foreground) : DEFAULT_RENDER_OPTIONS.foreground;
+  const colorMode = document.querySelector<HTMLSelectElement>("#colorMode")?.value ?? "default";
+  const useCustomColors = colorMode === "custom";
+  const logoColor = logoSelection !== "none" && logoSelection !== "custom" ? getLogoPreset(logoSelection)?.color : undefined;
+  const foreground = useCustomColors
+    ? readColorControl("foreground", DEFAULT_RENDER_OPTIONS.foreground)
+    : colorMode === "logo"
+      ? logoColor ?? DEFAULT_RENDER_OPTIONS.foreground
+      : DEFAULT_RENDER_OPTIONS.foreground;
   const background = useCustomColors ? readColorControl("background", DEFAULT_RENDER_OPTIONS.background) : DEFAULT_RENDER_OPTIONS.background;
   const transparentBackground = useCustomColors ? (document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false) : false;
   const margin = Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin);

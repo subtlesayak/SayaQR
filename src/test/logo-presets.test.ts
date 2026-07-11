@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectLogoPresetFromText, getLogoPreset, logoPresetToDataUrl } from "../lib/logo-presets";
+import { detectLogoPresetFromText, getLogoPreset, LOGO_PRESETS, logoPresetToDataUrl } from "../lib/logo-presets";
 
 describe("logo presets", () => {
   it.each([
@@ -11,6 +11,12 @@ describe("logo presets", () => {
     ["upi://pay?pa=name@bank&pn=Name", "upi"],
   ])("detects %s as %s", (input, expected) => {
     expect(detectLogoPresetFromText(input)?.id).toBe(expected);
+  });
+
+  it("provides a primary color for every logo preset", () => {
+    expect(LOGO_PRESETS.every((preset) => /^#[0-9A-F]{6}$/.test(preset.color))).toBe(true);
+    expect(getLogoPreset("instagram")?.color).toBe("#E4405F");
+    expect(getLogoPreset("upi")?.color).toBe("#66686C");
   });
 
   it("returns undefined for generic links", () => {
