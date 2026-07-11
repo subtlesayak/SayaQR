@@ -17,6 +17,14 @@ describe("logo presets", () => {
     expect(detectLogoPresetFromText("https://example.com/path")).toBeUndefined();
   });
 
+  it("uses the official UPI vector preset", () => {
+    const preset = getLogoPreset("upi");
+    expect(preset?.label).toContain("official");
+    expect(preset?.svg).toContain('viewBox="0 0 130.54 46.118"');
+    expect(preset?.svg).not.toContain("<text");
+    expect(preset?.svg).not.toMatch(/<script|onload=|onclick=|foreignObject|href="https?:/i);
+  });
+
   it("exports preset SVGs as local data URLs", () => {
     const preset = getLogoPreset("instagram");
     expect(preset).toBeTruthy();
