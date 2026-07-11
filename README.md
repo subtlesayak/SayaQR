@@ -9,7 +9,7 @@ SayaQR is a modern, privacy-first QR code generator that runs fully in the brows
 - Nayuki QR-Code-generator core vendored in `src/lib/nayuki-qrcodegen.ts`
 - QR modes: plain text, URL, Wi-Fi, email, SMS, phone, vCard contact, UPI payment, event/calendar, and geo location
 - Exports: SVG, PNG, WebP, and PDF
-- Design controls: foreground/background colors, transparent background, quiet zone, module size, rounded modules, finder pattern style, center logo upload, and logo size control
+- Design controls: foreground/background colors, transparent background, quiet zone, module size, rounded modules, finder pattern style, center logo upload, logo preset dropdown, and logo size control
 - Scannability checks for low contrast, small quiet zones, oversized logos, and long payloads
 - Batch CSV mode with content-column mapping and ZIP export
 - Privacy indicators for generated locally, no tracking, and no upload
@@ -62,3 +62,5 @@ This project uses the QR Code generator library by Project Nayuki:
 - Vendored file: `src/lib/nayuki-qrcodegen.ts`
 
 The Nayuki source file includes its original MIT license header. Keep that copyright and permission notice in all copies or substantial portions of the software.
+
+Embedded logo presets use local SVG path data from Material Design Icons, Simple Icons, and Wikimedia Commons where available. These marks are bundled for offline use and are not requested from a server at runtime. Brand names and logos may still be trademarks of their respective owners.

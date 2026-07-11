@@ -27,7 +27,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.0.3";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -168,11 +168,19 @@ function renderField(field: FieldConfig): string {
   return `<label class="field" for="${fieldId(field.name)}"><span>${field.label}</span><input id="${fieldId(field.name)}" data-payload-field="${field.name}" type="${field.type}" value="${escapeHtml(value)}"${placeholder}/></label>`;
 }
 
-function renderLogoPresetButtons(): string {
-  return LOGO_PRESETS.map((preset) => {
-    const active = logoSelection === preset.id;
-    return `<button class="logo-preset" type="button" data-logo-preset="${preset.id}" aria-pressed="${active}" title="${escapeHtml(preset.label)}"><span class="logo-preset-icon">${preset.svg}</span><span>${escapeHtml(preset.name)}</span></button>`;
+function renderLogoPresetOptions(): string {
+  const presetOptions = LOGO_PRESETS.map((preset) => {
+    const selected = preset.id === logoSelection ? "selected" : "";
+    return "<option value=\"" + escapeHtml(preset.id) + "\" " + selected + ">" + escapeHtml(preset.name) + "</option>";
   }).join("");
+  const customOption = logoSelection === "custom" ? "<option value=\"custom\" selected>Custom upload</option>" : "";
+  return "<option value=\"none\" " + (logoSelection === "none" ? "selected" : "") + ">None</option>" + presetOptions + customOption;
+}
+
+function renderSelectedLogoPreview(): string {
+  if (logoSelection === "custom") return "<span class=\"logo-empty-mark\">Custom</span>";
+  if (logoSelection === "none") return "<span class=\"logo-empty-mark\">None</span>";
+  return getLogoPreset(logoSelection)?.svg ?? "<span class=\"logo-empty-mark\">None</span>";
 }
 
 function renderApp(): void {
@@ -252,9 +260,12 @@ function renderApp(): void {
           <div class="field field-wide logo-picker">
             <div class="logo-picker-header">
               <span>Center logo</span>
-              <button id="clearLogo" class="clear-logo-button" type="button" aria-pressed="${logoSelection === "none"}">None</button>
             </div>
-            <div id="logoPresetGrid" class="logo-preset-grid" aria-label="Logo presets">${renderLogoPresetButtons()}</div>
+            <div class="logo-select-row">
+              <span id="logoPresetPreview" class="logo-preset-preview" aria-hidden="true">${renderSelectedLogoPreview()}</span>
+              <label class="field logo-select-field" for="logoPresetSelect"><span>Logo preset</span><select id="logoPresetSelect" aria-label="Logo preset">${renderLogoPresetOptions()}</select></label>
+            </div>
+            <p class="logo-source-note">SVG marks stay local. Brand trademarks belong to their owners.</p>
             <label class="logo-upload-field"><span>Upload custom</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
           </div>
           <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
@@ -476,9 +487,10 @@ function updateCustomColorPanel(): void {
 }
 
 function updateLogoPresetState(): void {
-  const grid = document.querySelector<HTMLDivElement>("#logoPresetGrid");
-  if (grid) grid.innerHTML = renderLogoPresetButtons();
-  document.querySelector<HTMLButtonElement>("#clearLogo")?.setAttribute("aria-pressed", String(logoSelection === "none"));
+  const select = document.querySelector<HTMLSelectElement>("#logoPresetSelect");
+  if (select) select.innerHTML = renderLogoPresetOptions();
+  const preview = document.querySelector<HTMLSpanElement>("#logoPresetPreview");
+  if (preview) preview.innerHTML = renderSelectedLogoPreview();
 }
 
 function applyLogoPreset(presetId: LogoPresetId, auto: boolean): void {
@@ -742,20 +754,7 @@ function wireEvents(): void {
       document.querySelector("#qrPreview")?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 
-    const logoPreset = target.closest<HTMLButtonElement>("[data-logo-preset]");
-    if (logoPreset) {
-      const preset = getLogoPreset(logoPreset.dataset.logoPreset);
-      if (preset) {
-        applyLogoPreset(preset.id, false);
-        scheduleQrUpdate();
-      }
-      return;
-    }
 
-    if (target.closest("#clearLogo")) {
-      clearCenterLogo(true);
-      return;
-    }
   });
 
   document.addEventListener("input", (event) => {
@@ -789,6 +788,19 @@ function wireEvents(): void {
       }
 
       if (target.id !== "csvUpload" && target.id !== "logoUpload") scheduleQrUpdate();
+    }
+  });
+
+  document.querySelector<HTMLSelectElement>("#logoPresetSelect")?.addEventListener("change", (event) => {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value === "none") {
+      clearCenterLogo(true);
+      return;
+    }
+    const preset = getLogoPreset(value);
+    if (preset) {
+      applyLogoPreset(preset.id, false);
+      scheduleQrUpdate();
     }
   });
 
