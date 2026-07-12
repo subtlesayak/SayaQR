@@ -24,6 +24,11 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('data-export="pdf"');
   });
 
+  it("selects the square finder style by default", () => {
+    expect(mainSource).toContain('<option value="square" selected>Square</option>');
+    expect(mainSource).not.toContain('<option value="rounded" selected>Rounded</option>');
+  });
+
   it("preserves custom color, logo, and offline controls", () => {
     expect(mainSource).toContain('id="foregroundHex"');
     expect(mainSource).toContain('id="backgroundHex"');
