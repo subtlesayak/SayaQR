@@ -1390,6 +1390,8 @@ async function exportBatchZip(): Promise<void> {
     }
     downloadBlob(await createZip(files), "sayaqr-batch.zip");
     button.textContent = `Exported ${generated}`;
+  } catch {
+    button.textContent = "Export failed";
   } finally {
     batchGenerating = false;
     batchCancellation.reset();
