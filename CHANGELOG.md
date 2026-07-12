@@ -2,6 +2,28 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.1] - 2026-07-13
+
+### Fixed
+
+- Improved mobile QR photo import with bounded overlapping crop passes when the full image cannot be decoded.
+- PDF export now matches the styled preview instead of rebuilding an unstyled QR.
+
+### Added
+
+- Lossless WYSIWYG PDF export through the bundled pdf-lib dependency.
+- PNG image clipboard copy with browser feature detection.
+- Native PNG file sharing with content-aware filenames and cancellation handling.
+- Installed-PWA GET share target for incoming links and text.
+- Clear guidance for PNG, SVG, PDF, and WebP formats.
+
+### Privacy and compatibility
+
+- Copy, share, PDF, and all raster exports use the current local SVG without uploading content.
+- Native share text is generic and never includes the QR payload.
+- Incoming share parameters are removed from the address bar and browser history immediately after local processing.
+- Unsupported clipboard and file-sharing actions remain hidden without silently downloading.
+
 ## [1.9] - 2026-07-13
 
 ### Added
@@ -26,4 +48,5 @@ All notable changes to SayaQR are documented here.
 - Added pure tests for scan grading, exact payload matching, file validation, aspect-ratio sizing, automatic fixes, stale-run protection, SVG safety, and imported-content detection.
 - Verified 87 tests, a successful production build, 320px and 375px layouts, local PNG/drop/paste import, automatic repair, custom SVG rasterization, and installed-PWA offline reload.
 
+[1.9.1]: https://github.com/subtlesayak/SayaQR/compare/v1.9...v1.9.1
 [1.9]: https://github.com/subtlesayak/SayaQR/compare/v1.8...v1.9
