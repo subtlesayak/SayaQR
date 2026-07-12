@@ -2,13 +2,18 @@
 
 SayaQR is a modern, privacy-first QR code generator that runs fully in the browser. QR content is generated locally with Nayuki's MIT-licensed QR encoder; there is no tracking, no server upload, and no content API call.
 
+Its default flow is intentionally simple: paste content, understand the detected intent, preview the QR, and download a PNG. Structured fields, customization, technical payloads, alternate formats, and batch generation remain available through progressive disclosure.
+
 ## Features
 
 - Vite + TypeScript single-page app
 - Offline PWA with service worker and web app manifest
 - Nayuki QR-Code-generator core vendored in `src/lib/nayuki-qrcodegen.ts`
 - QR modes: plain text, URL, Wi-Fi, email, SMS, phone, vCard contact, UPI payment, event/calendar, and geo location
-- Exports: SVG, PNG, WebP, and PDF
+- One-click PNG download, plus SVG, WebP, and PDF in More formats
+- Human-readable intent previews with local warnings for risky links, payments, events, Wi-Fi, and coordinates
+- Progressive disclosure for structured fields, customization, technical payloads, and batch generation
+- Content-aware export filenames based on the QR intent
 - Design controls: foreground/background colors, transparent background, quiet zone, module size, rounded modules, finder pattern style, center logo upload, logo preset dropdown, and logo size control
 - Scannability checks for low contrast, small quiet zones, oversized logos, and long payloads
 - Batch CSV/TXT mode with CSV column mapping, comma/newline text lists, and ZIP export

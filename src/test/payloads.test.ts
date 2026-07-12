@@ -85,6 +85,19 @@ describe("scannability warnings", () => {
 
     expect(warnings.some((warning) => warning.id === "quiet-zone")).toBe(true);
   });
+  it("warns when the payload is very long", () => {
+    const warnings = getScannabilityWarnings({
+      foreground: "#000000",
+      background: "#ffffff",
+      transparentBackground: false,
+      margin: 4,
+      logoScale: 0,
+      payloadLength: 1300,
+    });
+
+    expect(warnings.some((warning) => warning.id === "length")).toBe(true);
+  });
+
   it("supports 8-digit hex colors for contrast checks", () => {
     const warnings = getScannabilityWarnings({
       foreground: "#000000ff",
