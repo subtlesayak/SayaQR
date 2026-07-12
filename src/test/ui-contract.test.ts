@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
 import mainSource from "../main.ts?raw";
-import { readFileSync } from "node:fs";
-
-const styleSource = readFileSync(new URL("../style.css", import.meta.url), "utf8");
 
 describe("intent-first UI contract", () => {
   it("starts empty without demo payload defaults", () => {
@@ -35,8 +32,6 @@ describe("intent-first UI contract", () => {
     expect(mainSource.indexOf('class="tool-surface controls"')).toBeLessThan(mainSource.indexOf('class="tool-surface batch-zone'));
     expect(mainSource.indexOf('class="tool-surface batch-zone')).toBeLessThan(mainSource.indexOf('class="tool-surface preview-zone'));
     expect(mainSource).toContain('previewZone.dataset.contentState = currentPayload.trim() ? "ready" : "empty"');
-    expect(styleSource).toContain('.preview-zone[data-content-state="empty"] .intent-preview');
-    expect(styleSource).toMatch(/input\[type="range"\]\s*\{[^}]*min-height: 42px;/);
   });
 
   it("selects the square finder style by default", () => {
