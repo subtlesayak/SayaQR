@@ -23,7 +23,7 @@ export const DEFAULT_RENDER_OPTIONS: QrRenderOptions = {
   margin: 4,
   moduleSize: 12,
   rounded: 0.12,
-  finderStyle: "rounded",
+  finderStyle: "square",
   logoScale: 0.18,
   ecc: "HIGH",
 };
