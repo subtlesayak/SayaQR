@@ -2,6 +2,13 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.3] - 2026-07-13
+
+### Changed
+
+- Made Square the default finder pattern for new and reset designs.
+- Kept previously saved finder-style preferences unchanged.
+
 ## [1.9.2] - 2026-07-13
 
 ### Added
