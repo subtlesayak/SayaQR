@@ -1,3 +1,4 @@
+import { PDFDocument } from "pdf-lib";
 import { createQrCode, type ErrorCorrectionLevel, type NayukiQrCode } from "./qr";
 
 export type FinderStyle = "square" | "rounded" | "circle";
@@ -133,12 +134,71 @@ export function svgBlob(svg: string): Blob {
   return new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
 }
 
-export async function svgToRasterBlob(svg: string, mimeType: "image/png" | "image/webp"): Promise<Blob> {
-  const match = svg.match(/width="(\d+)" height="(\d+)"/);
+export interface SvgRasterOptions {
+  minimumSize?: number;
+  background?: string;
+}
+
+export interface PdfPageLayout {
+  pageSize: number;
+  imageWidth: number;
+  imageHeight: number;
+  x: number;
+  y: number;
+}
+
+export function calculatePdfPageLayout(
+  imageWidth: number,
+  imageHeight: number,
+  pageMargin = 36,
+): PdfPageLayout {
+  if (imageWidth <= 0 || imageHeight <= 0) throw new Error("PDF image dimensions must be positive.");
+  const margin = Math.max(0, pageMargin);
+  const pageSize = Math.max(imageWidth, imageHeight) + margin * 2;
+  return {
+    pageSize,
+    imageWidth,
+    imageHeight,
+    x: (pageSize - imageWidth) / 2,
+    y: (pageSize - imageHeight) / 2,
+  };
+}
+
+function svgDimensions(svg: string): { width: number; height: number } {
+  const match = svg.match(/width="([\d.]+)"\s+height="([\d.]+)"/);
   const width = match ? Number(match[1]) : 1024;
   const height = match ? Number(match[2]) : width;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    throw new Error("SVG dimensions are invalid.");
+  }
+  return { width, height };
+}
+
+function canvasBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: "image/png" | "image/webp",
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("Canvas export failed"))),
+      mimeType,
+      mimeType === "image/webp" ? 0.95 : undefined,
+    );
+  });
+}
+
+export async function svgToRasterBlob(
+  svg: string,
+  mimeType: "image/png" | "image/webp",
+  options: SvgRasterOptions = {},
+): Promise<Blob> {
+  const source = svgDimensions(svg);
+  const minimumSize = Math.max(0, Math.floor(options.minimumSize ?? 0));
+  const targetSize = Math.max(minimumSize, Math.ceil(source.width), Math.ceil(source.height));
   const image = new Image();
+  image.decoding = "async";
   const url = URL.createObjectURL(svgBlob(svg));
+  let canvas: HTMLCanvasElement | null = null;
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -147,81 +207,68 @@ export async function svgToRasterBlob(svg: string, mimeType: "image/png" | "imag
       image.src = url;
     });
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas = document.createElement("canvas");
+    canvas.width = targetSize;
+    canvas.height = targetSize;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas is not available");
-    context.drawImage(image, 0, 0, width, height);
 
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Canvas export failed"))), mimeType, 0.95);
-    });
+    if (options.background) {
+      context.fillStyle = options.background;
+      context.fillRect(0, 0, targetSize, targetSize);
+    }
+
+    const scale = Math.min(targetSize / source.width, targetSize / source.height);
+    const drawWidth = source.width * scale;
+    const drawHeight = source.height * scale;
+    context.drawImage(
+      image,
+      (targetSize - drawWidth) / 2,
+      (targetSize - drawHeight) / 2,
+      drawWidth,
+      drawHeight,
+    );
+
+    return await canvasBlob(canvas, mimeType);
   } finally {
+    image.onload = null;
+    image.onerror = null;
+    image.src = "";
     URL.revokeObjectURL(url);
-  }
-}
-
-function colorToRgb(color: string): [number, number, number] {
-  const cleaned = color.replace(/^#/, "");
-  const full = cleaned.length === 3 ? cleaned.split("").map((char) => char + char).join("") : cleaned.slice(0, 6);
-  return [parseInt(full.slice(0, 2), 16) / 255, parseInt(full.slice(2, 4), 16) / 255, parseInt(full.slice(4, 6), 16) / 255];
-}
-
-function pdfEscape(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-}
-
-export function qrPdfBlob(payload: string, options: QrRenderOptions): Blob {
-  const qr = createQrCode(payload, options.ecc);
-  const margin = Math.max(0, Math.floor(options.margin));
-  const totalModules = qr.size + margin * 2;
-  const unit = Math.max(3, Math.floor(options.moduleSize * 0.75));
-  const page = totalModules * unit + 72;
-  const offset = 36;
-  const [fr, fg, fb] = colorToRgb(options.foreground);
-  const [br, bg, bb] = colorToRgb(options.background);
-  const commands: string[] = ["q"];
-
-  if (!options.transparentBackground) {
-    commands.push(`${br.toFixed(4)} ${bg.toFixed(4)} ${bb.toFixed(4)} rg`);
-    commands.push(`0 0 ${page} ${page} re f`);
-  }
-
-  commands.push(`${fr.toFixed(4)} ${fg.toFixed(4)} ${fb.toFixed(4)} rg`);
-  for (let y = 0; y < qr.size; y++) {
-    for (let x = 0; x < qr.size; x++) {
-      if (qr.getModule(x, y)) {
-        const px = offset + (margin + x) * unit;
-        const py = page - offset - (margin + y + 1) * unit;
-        commands.push(`${px} ${py} ${unit} ${unit} re f`);
-      }
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
     }
   }
-  commands.push("Q");
-  commands.push("BT /F1 8 Tf 36 18 Td (Generated locally by SayaQR) Tj ET");
+}
 
-  const stream = commands.join("\n");
-  const objects = [
-    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`,
-    `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`,
-    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page} ${page}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
-    `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
-    `5 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`,
-  ];
+export async function svgToPdfBlob(
+  svg: string,
+  options: {
+    pageMargin?: number;
+    minimumRasterSize?: number;
+  } = {},
+): Promise<Blob> {
+  const pageMargin = Math.max(0, options.pageMargin ?? 36);
+  const minimumRasterSize = Math.max(1600, options.minimumRasterSize ?? 1600);
+  const png = await svgToRasterBlob(svg, "image/png", {
+    minimumSize: minimumRasterSize,
+    background: "#ffffff",
+  });
 
-  let body = "%PDF-1.4\n";
-  const offsets = [0];
-  for (const object of objects) {
-    offsets.push(body.length);
-    body += object;
-  }
-  const xref = body.length;
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (let i = 1; i <= objects.length; i++) {
-    body += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
-  }
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  const pdf = await PDFDocument.create();
+  pdf.setTitle("SayaQR");
+  pdf.setCreator("SayaQR");
+  const image = await pdf.embedPng(await png.arrayBuffer());
+  const layout = calculatePdfPageLayout(image.width, image.height, pageMargin);
+  const page = pdf.addPage([layout.pageSize, layout.pageSize]);
+  page.drawImage(image, {
+    x: layout.x,
+    y: layout.y,
+    width: layout.imageWidth,
+    height: layout.imageHeight,
+  });
 
-  return new Blob([body.replace("Generated locally by SayaQR", pdfEscape("Generated locally by SayaQR"))], { type: "application/pdf" });
+  const bytes = await pdf.save();
+  return new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
 }
