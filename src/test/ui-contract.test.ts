@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import mainSource from "../main.ts?raw";
-import styleSource from "../style.css?raw";
+import styleSource from "../style.css?inline";
 
 describe("intent-first UI contract", () => {
   it("starts empty without demo payload defaults", () => {
