@@ -52,7 +52,7 @@ export function calculateContainedDimensions(width: number, height: number, maxD
   };
 }
 
-function assertSafeSvg(svg: string): void {
+export function validateSvgMarkup(svg: string): void {
   const unsafeMarkup = /<\s*(?:script|foreignObject)\b|\son[a-z]+\s*=|(?:href|xlink:href)\s*=\s*["']\s*(?:javascript:|https?:|\/\/)|@import\b|url\(\s*["']?\s*(?:https?:|\/\/)/i;
   if (unsafeMarkup.test(svg)) {
     throw new Error("This SVG contains unsupported active or remote content.");
@@ -62,7 +62,7 @@ function assertSafeSvg(svg: string): void {
 async function localImageBlob(file: File): Promise<Blob> {
   if (file.type.toLowerCase() !== "image/svg+xml") return file;
   const svg = await file.text();
-  assertSafeSvg(svg);
+  validateSvgMarkup(svg);
   return new Blob([svg], { type: "image/svg+xml" });
 }
 
