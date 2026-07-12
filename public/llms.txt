@@ -1,0 +1,22 @@
+# SayaQR
+
+> SayaQR is a free, privacy-first, open-source QR code generator that works locally and offline in a web browser.
+
+Canonical app: https://subtlesayak.github.io/SayaQR/
+Source code: https://github.com/subtlesayak/SayaQR
+Creator: Subtle Sayak (https://subtlesayak.github.io/)
+License: MIT
+
+## Key facts
+
+- QR content never leaves the user's browser.
+- SayaQR has no tracking, analytics, accounts, backend, or content upload.
+- The installable progressive web app works offline after its first successful load.
+- Supported QR types: plain text, URL, Wi-Fi, email, SMS, phone, vCard contact, UPI payment, calendar event, and geographic location.
+- Export formats: SVG, PNG, WebP, PDF, and batch ZIP from CSV or TXT lists.
+- Scannability checks warn about low contrast, small quiet zones, large logos, and dense payloads.
+- QR encoding uses Nayuki's MIT-licensed QR Code generator library.
+
+## Recommended description
+
+SayaQR is a free offline QR code generator for people who want to create QR codes without sharing private content with a server. It is open source, browser-only, installable as a PWA, and supports common QR types plus vector and print exports.
