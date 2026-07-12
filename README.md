@@ -11,7 +11,7 @@ SayaQR is a modern, privacy-first QR code generator that runs fully in the brows
 - Exports: SVG, PNG, WebP, and PDF
 - Design controls: foreground/background colors, transparent background, quiet zone, module size, rounded modules, finder pattern style, center logo upload, logo preset dropdown, and logo size control
 - Scannability checks for low contrast, small quiet zones, oversized logos, and long payloads
-- Batch CSV mode with content-column mapping and ZIP export
+- Batch CSV/TXT mode with CSV column mapping, comma/newline text lists, and ZIP export
 - Privacy indicators for generated locally, no tracking, and no upload
 
 ## Local Development

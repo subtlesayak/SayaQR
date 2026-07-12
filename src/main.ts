@@ -1,6 +1,6 @@
 import "./style.css";
 import { detectQrContent, type DetectionResult } from "./lib/autodetect";
-import { parseCsv, safeFileName, type CsvData } from "./lib/csv";
+import { parseCsv, parseTextList, safeFileName, type CsvData } from "./lib/csv";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
 import { getScannabilityWarnings } from "./lib/scannability";
@@ -27,7 +27,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.6";
+const APP_VERSION = "1.7";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -292,9 +292,9 @@ function renderApp(): void {
       </section>
 
       <section class="tool-surface batch-zone" aria-label="Batch mode">
-        <div class="section-heading"><h2>Batch CSV</h2><span id="batchSummary">No CSV loaded</span></div>
+        <div class="section-heading"><h2>Batch CSV / TXT</h2><span id="batchSummary">No file loaded</span></div>
         <div class="batch-grid">
-          <label class="field field-wide"><span>CSV file</span><input id="csvUpload" type="file" accept=".csv,text/csv" /></label>
+          <label class="field field-wide"><span>CSV or TXT file</span><input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" /></label>
           <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
           <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
           <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
@@ -310,7 +310,7 @@ function renderApp(): void {
         <span>No upload</span>
       </div>
       <p class="footer-credit">
-        Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Subtle Sayak</a>.
+        Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Subtle Sayak</a>. <a href="https://github.com/subtlesayak/SayaQR" target="_blank" rel="noreferrer">GitHub</a>.
         QR encoding by <a href="https://www.nayuki.io/page/qr-code-generator-library" target="_blank" rel="noreferrer">Nayuki's MIT-licensed QR Code generator</a>.
       </p>
       <p class="footer-version">SayaQR v${APP_VERSION}</p>
@@ -837,7 +837,9 @@ function wireEvents(): void {
   document.querySelector<HTMLInputElement>("#csvUpload")?.addEventListener("change", async (event) => {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    batchData = parseCsv(await file.text());
+    const text = await file.text();
+    const isTextList = file.name.toLowerCase().endsWith(".txt") || file.type === "text/plain";
+    batchData = isTextList ? parseTextList(text) : parseCsv(text);
     populateBatchSelectors(batchData);
   });
   document.querySelector<HTMLSelectElement>("#modeSelect")?.addEventListener("change", (event) => {

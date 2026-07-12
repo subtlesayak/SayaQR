@@ -3,7 +3,7 @@ export interface CsvData {
   rows: Record<string, string>[];
 }
 
-export function parseCsv(input: string): CsvData {
+function parseDelimitedRows(input: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -36,11 +36,27 @@ export function parseCsv(input: string): CsvData {
 
   row.push(cell);
   if (row.some((value) => value.trim().length > 0)) rows.push(row);
+  return rows;
+}
 
-  const headers = rows.shift()?.map((header, index) => header.trim() || `Column ${index + 1}`) ?? [];
+export function parseCsv(input: string): CsvData {
+  const rows = parseDelimitedRows(input);
+  const headers = rows.shift()?.map((header, index) => header.trim() || "Column " + (index + 1)) ?? [];
   return {
     headers,
     rows: rows.map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]))),
+  };
+}
+
+export function parseTextList(input: string): CsvData {
+  const values = parseDelimitedRows(input)
+    .flat()
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return {
+    headers: ["Content"],
+    rows: values.map((value) => ({ Content: value })),
   };
 }
 
