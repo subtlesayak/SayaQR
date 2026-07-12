@@ -27,9 +27,10 @@ describe("discoverability contract", () => {
     expect(llms).toContain("QR content never leaves the user's browser");
   });
 
-  it("keeps truthful indexable privacy and feature answers in the app", () => {
-    expect(mainSource).toContain("A free, open-source QR code generator that works offline");
-    expect(mainSource).toContain("Is SayaQR private?");
-    expect(mainSource).toContain("What QR codes and formats are supported?");
+  it("keeps truthful privacy and feature answers in the initial HTML", () => {
+    expect(indexHtml).toContain("A free, open-source QR code generator that works offline");
+    expect(indexHtml).toContain("Is SayaQR private?");
+    expect(indexHtml).toContain("What QR codes and formats are supported?");
+    expect(mainSource).not.toContain('class="about-sayaqr"');
   });
 });
