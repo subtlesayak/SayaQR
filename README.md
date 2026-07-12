@@ -4,6 +4,12 @@ SayaQR is a modern, privacy-first QR code generator that runs fully in the brows
 
 Its default flow is intentionally simple: paste content, understand the detected intent, preview the QR, and download a PNG. Structured fields, customization, technical payloads, alternate formats, and batch generation remain available through progressive disclosure.
 
+## Phase 4: Design memory and batch polish
+
+Design memory is opt-in. Enable **Use this design next time** to keep only visual settings in localStorage under the versioned key `sayaqr:design:v1`. QR content, payload fields, Wi-Fi passwords, contact details, uploaded logos, imported images, and batch rows are never stored.
+
+Batch generation stays collapsed until needed. It suggests likely content and filename columns, validates rows before generation, resolves duplicate filenames deterministically, yields during large jobs, supports cancellation, and adds `batch-report.csv` to the ZIP when rows are skipped. A sample CSV is generated locally from the batch panel.
+
 ## Features
 
 - Vite + TypeScript single-page app

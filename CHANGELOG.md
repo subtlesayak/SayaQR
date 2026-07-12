@@ -2,6 +2,34 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.3] - 2026-07-13
+
+### Changed
+
+- Made Square the default finder pattern for new and reset designs.
+- Kept previously saved finder-style preferences unchanged.
+
+## [1.9.2] - 2026-07-13
+
+### Added
+
+- Opt-in, versioned local design preferences with strict schema validation and a reset action.
+- Automatic CSV content and filename column suggestions.
+- Batch row validation, concise summaries, five-row previews, and a collapsed full report.
+- Chunked batch generation with progress, generated/skipped counts, and cancellation.
+- Deterministic duplicate filename suffixes and `batch-report.csv` for skipped rows.
+- A locally generated sample CSV.
+
+### Changed
+
+- Preferred export format can be remembered with the rest of the visual design.
+- Preview scrolling remains available while its scrollbar is visually hidden.
+- Batch generation remains collapsed and now explains its local-only workflow.
+
+### Privacy
+
+- Design memory cannot serialize QR content, payload fields, credentials, uploaded logos, imported images, or batch data.
+
 ## [1.9.1] - 2026-07-13
 
 ### Fixed

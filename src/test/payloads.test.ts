@@ -50,6 +50,10 @@ describe("QR payload formatting", () => {
 });
 
 describe("exports", () => {
+  it("uses square finder patterns by default", () => {
+    expect(DEFAULT_RENDER_OPTIONS.finderStyle).toBe("square");
+  });
+
   it("creates SVG output", () => {
     const svg = buildQrSvg("hello", DEFAULT_RENDER_OPTIONS);
     expect(svg).toMatch(/^<svg/);
