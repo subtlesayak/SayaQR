@@ -1,12 +1,14 @@
 {
   "name": "SayaQR Offline QR Generator",
   "short_name": "SayaQR",
-  "description": "Privacy-first offline QR code generator.",
+  "description": "Free, open-source QR code generator that creates and exports QR codes locally with no tracking or uploads.",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#0f172a",
+  "categories": ["utilities", "productivity"],
   "icons": [
     {
       "src": "./icon.svg",
