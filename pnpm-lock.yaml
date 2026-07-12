@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      jsqr:
+        specifier: ^1.4.0
+        version: 1.4.0
     devDependencies:
       typescript:
         specifier: ^5.8.3
@@ -415,6 +419,9 @@ packages:
 
   js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
+
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   loupe@3.2.1:
     resolution: {integrity: sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ==}
@@ -847,6 +854,8 @@ snapshots:
     optional: true
 
   js-tokens@9.0.1: {}
+
+  jsqr@1.4.0: {}
 
   loupe@3.2.1: {}
 

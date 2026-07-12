@@ -16,8 +16,18 @@ Its default flow is intentionally simple: paste content, understand the detected
 - Content-aware export filenames based on the QR intent
 - Design controls: foreground/background colors, transparent background, quiet zone, module size, rounded modules, finder pattern style, center logo upload, logo preset dropdown, and logo size control
 - Scannability checks for low contrast, small quiet zones, oversized logos, and long payloads
+- Local QR image import from the file picker, drag and drop, or pasted screenshots
+- Local scan-confidence simulations at multiple sizes, blur, contrast, and rotation conditions
+- Conservative automatic fixes for QR designs rated risky or poor
+- Custom logo uploads, including SVG files, are rasterized locally to PNG before embedding
 - Batch CSV/TXT mode with CSV column mapping, comma/newline text lists, and ZIP export
 - Privacy indicators for generated locally, no tracking, and no upload
+
+## Local Guardian Privacy
+
+Imported QR images stay on the device and are decoded locally with the bundled jsQR library. Pasted screenshots, dropped images, custom logos, generated scan variants, and decoded payloads are never uploaded.
+
+Scan confidence is an advisory local test, not a guarantee that every camera or scanning app will read the QR. The six simulations help identify common size, blur, contrast, and rotation risks before printing or sharing. Simulation canvases are released after each check and are not stored.
 
 ## Local Development
 
@@ -69,3 +79,7 @@ This project uses the QR Code generator library by Project Nayuki:
 The Nayuki source file includes its original MIT license header. Keep that copyright and permission notice in all copies or substantial portions of the software.
 
 Embedded logo presets use local SVG path data from Material Design Icons, Simple Icons, and Wikimedia Commons where available. These marks are bundled for offline use and are not requested from a server at runtime. Brand names and logos may still be trademarks of their respective owners.
+
+## QR Decoder Attribution
+
+Local QR image decoding uses [jsQR](https://github.com/cozmo/jsQR), bundled with the application for offline use under the Apache License 2.0. No decoder code, images, or payloads are loaded from or sent to a remote service.

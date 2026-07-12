@@ -2,6 +2,13 @@ import "./style.css";
 import { detectQrContent, type DetectionResult } from "./lib/autodetect";
 import { suggestExportName } from "./lib/export-name";
 import { buildIntentPreview, type IntentPreview } from "./lib/intent-preview";
+import { decodeQrImageFile, rasterizeImageFileToPng } from "./lib/qr-decoder";
+import {
+  calculateAutoFixValues,
+  LatestScanRun,
+  testQrSvg,
+  type ScanConfidenceResult,
+} from "./lib/scan-confidence";
 import { parseCsv, parseTextList, safeFileName, type CsvData } from "./lib/csv";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
@@ -29,7 +36,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.8";
+const APP_VERSION = "1.9";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -138,6 +145,8 @@ let currentPayload = "";
 let currentSvg = "";
 let batchData: CsvData | null = null;
 let pendingQrFrame = 0;
+let pendingScanTimer = 0;
+const latestScanRun = new LatestScanRun();
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -221,7 +230,18 @@ function renderApp(): void {
           <h2>Create QR</h2>
           <span id="modeHint"></span>
         </div>
-        <label class="field field-wide quick-content" for="autoContent"><span>Quick content</span><textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}"></textarea></label>
+        <div id="quickContentDropZone" class="field field-wide quick-content">
+          <div class="quick-content-heading">
+            <label for="autoContent">Quick content</label>
+            <label class="import-qr-action" for="qrImport">
+              <svg class="import-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4M4 5v4M20 5h-4M20 5v4M4 19h4M4 19v-4M20 19h-4M20 19v-4M9 9h6v6H9z"/></svg>
+              <span>Import QR image</span>
+              <input id="qrImport" type="file" accept="image/*" />
+            </label>
+          </div>
+          <textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}"></textarea>
+        </div>
+        <p id="qrImportStatus" class="import-status" aria-live="polite"></p>
         <p id="autoDetectStatus" class="detect-status" aria-live="polite">Paste content above, then auto-detect its category.</p>
 
         <details class="disclosure" id="editDetails">
@@ -274,6 +294,7 @@ function renderApp(): void {
               </div>
               <p class="logo-source-note">SVG marks stay local. Brand trademarks belong to their owners.</p>
               <label class="logo-upload-field"><span>Upload custom</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
+              <p id="logoUploadStatus" class="logo-upload-status" aria-live="polite"></p>
             </div>
             <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
           </div>
@@ -298,6 +319,15 @@ function renderApp(): void {
             <h3>Scan checks</h3>
             <span id="scanCheckStatus">Waiting for content</span>
           </div>
+          <div class="local-scan-row">
+            <span id="scanConfidenceBadge" class="scan-confidence-badge" data-level="unavailable">Local scan check: Waiting for QR</span>
+            <button id="autoFixButton" class="auto-fix-button" type="button" hidden>Fix automatically</button>
+          </div>
+          <details id="scanTestDetails" class="scan-test-details" hidden>
+            <summary>Scan test details</summary>
+            <p>Advisory local simulations, not a scan guarantee.</p>
+            <ul id="scanCaseResults"></ul>
+          </details>
           <div id="warnings" class="warnings" aria-live="polite"></div>
         </section>
         <div class="export-actions" aria-label="Export QR code">
@@ -656,6 +686,143 @@ function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: 
     .join("");
 }
 
+
+function confidenceLabel(result: ScanConfidenceResult): string {
+  return result.level.charAt(0).toUpperCase() + result.level.slice(1);
+}
+
+function renderScanConfidence(result: ScanConfidenceResult | null, checking = false): void {
+  const badge = document.querySelector<HTMLSpanElement>("#scanConfidenceBadge");
+  const fixButton = document.querySelector<HTMLButtonElement>("#autoFixButton");
+  const details = document.querySelector<HTMLDetailsElement>("#scanTestDetails");
+  const caseList = document.querySelector<HTMLUListElement>("#scanCaseResults");
+  if (!badge || !fixButton || !details || !caseList) return;
+
+  if (checking) {
+    badge.dataset.level = "checking";
+    badge.textContent = "Checking locally...";
+    fixButton.hidden = true;
+    details.hidden = true;
+    return;
+  }
+
+  if (!result) {
+    badge.dataset.level = "unavailable";
+    badge.textContent = "Local scan check: Waiting for QR";
+    fixButton.hidden = true;
+    details.hidden = true;
+    caseList.innerHTML = "";
+    return;
+  }
+
+  badge.dataset.level = result.level;
+  badge.textContent = result.level === "unavailable"
+    ? "Local scan check: Unavailable"
+    : `Local scan check: ${confidenceLabel(result)} \u2014 passed ${result.passed} of ${result.total} simulations`;
+  fixButton.hidden = result.level !== "risky" && result.level !== "poor";
+  details.hidden = result.cases.length === 0;
+  caseList.innerHTML = result.cases
+    .map((item) => `<li><span>${escapeHtml(item.label)}</span><strong>${item.passed ? "Passed" : "Failed"}</strong></li>`)
+    .join("");
+}
+
+function scheduleLocalScanCheck(): void {
+  if (pendingScanTimer) window.clearTimeout(pendingScanTimer);
+  pendingScanTimer = 0;
+  const runId = latestScanRun.next();
+  const svg = currentSvg;
+  const payload = currentPayload;
+
+  if (!svg || !payload.trim()) {
+    renderScanConfidence(null);
+    return;
+  }
+
+  renderScanConfidence(null);
+  pendingScanTimer = window.setTimeout(async () => {
+    pendingScanTimer = 0;
+    if (!latestScanRun.isCurrent(runId)) return;
+    renderScanConfidence(null, true);
+    const result = await testQrSvg(svg, payload);
+    if (!latestScanRun.isCurrent(runId)) return;
+    renderScanConfidence(result);
+  }, 550);
+}
+
+function writeColorControl(id: ColorControlId, value: string): void {
+  const picker = document.querySelector<HTMLInputElement>(`#${id}`);
+  const hex = document.querySelector<HTMLInputElement>(`#${id}Hex`);
+  const swatch = document.querySelector<HTMLSpanElement>(`#${id}Swatch`);
+  if (picker) picker.value = value.slice(0, 7);
+  if (hex) {
+    hex.value = value;
+    hex.setAttribute("aria-invalid", "false");
+  }
+  if (swatch) swatch.style.setProperty("--swatch-color", value);
+}
+
+function applyAutomaticFix(): void {
+  if (!currentPayload.trim()) return;
+  const options = getRenderOptions();
+  const fixed = calculateAutoFixValues({
+    margin: options.margin,
+    ecc: options.ecc,
+    logoScale: options.logoScale,
+    rounded: options.rounded,
+    transparentBackground: options.transparentBackground,
+    foreground: options.foreground,
+    background: options.background,
+  });
+
+  const margin = document.querySelector<HTMLInputElement>("#margin");
+  const ecc = document.querySelector<HTMLSelectElement>("#ecc");
+  const logoScale = document.querySelector<HTMLInputElement>("#logoScale");
+  const rounded = document.querySelector<HTMLInputElement>("#rounded");
+  const transparent = document.querySelector<HTMLInputElement>("#transparentBackground");
+  if (margin) margin.value = String(fixed.margin);
+  if (ecc) ecc.value = fixed.ecc;
+  if (logoScale) logoScale.value = String(fixed.logoScale);
+  if (rounded) rounded.value = String(fixed.rounded);
+  if (transparent) transparent.checked = false;
+
+  if (fixed.foreground !== options.foreground || fixed.background !== options.background) {
+    const colorMode = document.querySelector<HTMLSelectElement>("#colorMode");
+    if (colorMode) colorMode.value = "custom";
+    writeColorControl("foreground", fixed.foreground);
+    writeColorControl("background", fixed.background);
+    updateCustomColorPanel();
+  }
+
+  updateQr();
+}
+
+async function importQrImage(file: File): Promise<void> {
+  const status = document.querySelector<HTMLParagraphElement>("#qrImportStatus");
+  const quickContent = document.querySelector<HTMLTextAreaElement>("#autoContent");
+  if (!status || !quickContent) return;
+
+  status.textContent = "Reading QR locally...";
+  try {
+    const decoded = await decodeQrImageFile(file);
+    if (!decoded) {
+      status.textContent = "No QR code found. Current content kept.";
+      return;
+    }
+
+    const detection = detectQrContent(decoded.data);
+    quickContent.value = decoded.data;
+    categorySelection = AUTO_CATEGORY_VALUE;
+    syncLogoFromQuickContent(decoded.data);
+    applyDetectionResult(detection);
+    status.textContent = "QR imported locally";
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "This QR image could not be read.";
+  } finally {
+    const picker = document.querySelector<HTMLInputElement>("#qrImport");
+    if (picker) picker.value = "";
+  }
+}
+
 function updateExportAvailability(available: boolean): void {
   document.querySelectorAll<HTMLButtonElement>("[data-export]").forEach((button) => {
     button.disabled = !available;
@@ -697,6 +864,7 @@ function updateQr(): void {
     updateMobilePreview("<span class=\"mini-empty\">QR</span>", "Waiting for content", "empty");
     updateExportAvailability(false);
     renderWarnings(options, 0);
+    scheduleLocalScanCheck();
     return;
   }
 
@@ -708,6 +876,7 @@ function updateQr(): void {
     updateMobilePreview(currentSvg, qr.size + " x " + qr.size + " modules | " + currentPayload.length + " chars", "ready");
     updateExportAvailability(true);
     renderWarnings(options, currentPayload.length);
+    scheduleLocalScanCheck();
   } catch (error) {
     currentSvg = "";
     preview.innerHTML = "<div class=\"empty-state error\">This content is too long for a QR code.</div>";
@@ -715,6 +884,7 @@ function updateQr(): void {
     updateMobilePreview("<span class=\"mini-empty\">!</span>", "Data too long", "error");
     updateExportAvailability(false);
     renderWarnings(options, currentPayload.length, [error instanceof Error ? error.message : "QR generation failed"]);
+    scheduleLocalScanCheck();
   }
 }
 
@@ -836,6 +1006,11 @@ function wireEvents(): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
 
+    if (target.closest("#autoFixButton")) {
+      applyAutomaticFix();
+      return;
+    }
+
     if (target.closest("#mobileExportToggle")) {
       toggleMobileExportMenu();
       return;
@@ -888,7 +1063,7 @@ function wireEvents(): void {
         syncLogoFromQuickContent(target.value);
       }
 
-      if (target.id !== "csvUpload" && target.id !== "logoUpload") scheduleQrUpdate();
+      if (target.id !== "csvUpload" && target.id !== "logoUpload" && target.id !== "qrImport") scheduleQrUpdate();
     }
   });
 
@@ -905,23 +1080,67 @@ function wireEvents(): void {
     }
   });
 
-  document.querySelector<HTMLInputElement>("#logoUpload")?.addEventListener("change", (event) => {
+  document.querySelector<HTMLInputElement>("#logoUpload")?.addEventListener("change", async (event) => {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
+    const status = document.querySelector<HTMLParagraphElement>("#logoUploadStatus");
     if (!file) {
       clearCenterLogo(true);
+      if (status) status.textContent = "";
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      logoDataUrl = String(reader.result ?? "");
+
+    if (status) status.textContent = "Processing logo locally...";
+    try {
+      logoDataUrl = await rasterizeImageFileToPng(file);
       logoSelection = "custom";
       logoAutoApplied = false;
       logoAutoSuppressedFor = "";
       updateLogoPresetState();
+      if (status) status.textContent = "Custom logo rasterized locally.";
       scheduleQrUpdate();
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      input.value = "";
+      if (status) status.textContent = error instanceof Error ? error.message : "This logo could not be decoded.";
+    }
+  });
+
+  document.querySelector<HTMLInputElement>("#qrImport")?.addEventListener("change", (event) => {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (file) void importQrImage(file);
+  });
+
+  const quickDropZone = document.querySelector<HTMLDivElement>("#quickContentDropZone");
+  quickDropZone?.addEventListener("dragenter", (event) => {
+    event.preventDefault();
+    quickDropZone.classList.add("is-dragging");
+  });
+  quickDropZone?.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    quickDropZone.classList.add("is-dragging");
+  });
+  quickDropZone?.addEventListener("dragleave", (event) => {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || !quickDropZone.contains(next)) quickDropZone.classList.remove("is-dragging");
+  });
+  quickDropZone?.addEventListener("drop", (event) => {
+    event.preventDefault();
+    quickDropZone.classList.remove("is-dragging");
+    const file = Array.from(event.dataTransfer?.files ?? []).find((item) => item.type.startsWith("image/"));
+    if (file) void importQrImage(file);
+    else {
+      const status = document.querySelector<HTMLParagraphElement>("#qrImportStatus");
+      if (status) status.textContent = "Drop a supported QR image.";
+    }
+  });
+
+  document.querySelector<HTMLTextAreaElement>("#autoContent")?.addEventListener("paste", (event) => {
+    const imageItem = Array.from(event.clipboardData?.items ?? []).find((item) => item.type.startsWith("image/"));
+    const file = imageItem?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    void importQrImage(file);
   });
 
   document.querySelector<HTMLInputElement>("#csvUpload")?.addEventListener("change", async (event) => {
