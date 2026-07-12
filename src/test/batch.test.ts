@@ -54,6 +54,23 @@ describe("batch planning", () => {
     expect(controller.isCancelled).toBe(false);
   });
 
+  it("validates 500 Unicode and emoji rows without dropping entries", () => {
+    const rows = Array.from({ length: 500 }, (_, index) => ({
+      content: `नमस्ते QR ${index} ✅`,
+      filename: "ticket",
+    }));
+    const result = validateBatchRows(
+      { headers: ["content", "filename"], rows },
+      "content",
+      "filename",
+      () => true,
+    );
+    expect(result.generatableCount).toBe(500);
+    expect(result.skippedCount).toBe(0);
+    expect(result.rows[0].outputFilename).toBe("ticket");
+    expect(result.rows[499].outputFilename).toBe("ticket-500");
+  });
+
   it("builds a CSV report for skipped rows", () => {
     const data: CsvData = {
       headers: ["content", "filename"],
