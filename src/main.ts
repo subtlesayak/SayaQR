@@ -61,7 +61,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.2";
+const APP_VERSION = "1.9.3";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -312,7 +312,7 @@ function renderApp(): void {
             <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
             <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
             <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
-            <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
+            <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square" selected>Square</option><option value="rounded">Rounded</option><option value="circle">Circle</option></select></label>
             <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
             <div class="field field-wide logo-picker">
               <div class="logo-picker-header"><span>Center logo</span></div>
@@ -694,7 +694,8 @@ function readDesignPreferencesFromControls(): DesignPreferences {
   const colorModeValue = document.querySelector<HTMLSelectElement>("#colorMode")?.value;
   const colorMode = colorModeValue === "logo" || colorModeValue === "custom" ? colorModeValue : "default";
   const finderValue = document.querySelector<HTMLSelectElement>("#finderStyle")?.value;
-  const finderStyle: FinderStyle = finderValue === "square" || finderValue === "circle" ? finderValue : "rounded";
+  const finderStyle: FinderStyle =
+    finderValue === "rounded" || finderValue === "circle" ? finderValue : DEFAULT_RENDER_OPTIONS.finderStyle;
   const eccValue = document.querySelector<HTMLSelectElement>("#ecc")?.value;
   const ecc: QrRenderOptions["ecc"] =
     eccValue === "LOW" || eccValue === "MEDIUM" || eccValue === "QUARTILE" ? eccValue : "HIGH";
