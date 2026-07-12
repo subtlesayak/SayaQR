@@ -741,16 +741,26 @@ function applyDesignPreferences(preferences: DesignPreferences): void {
   updatePreferredExportFormat();
 }
 
+function browserStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 function persistDesignIfEnabled(): void {
   const remember = document.querySelector<HTMLInputElement>("#rememberDesign");
   if (!remember?.checked) return;
   const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
-  const saved = saveDesignPreferences(window.localStorage, readDesignPreferencesFromControls());
+  const storage = browserStorage();
+  const saved = storage ? saveDesignPreferences(storage, readDesignPreferencesFromControls()) : false;
   if (status) status.textContent = saved ? "Design saved locally" : "Browser storage is unavailable";
 }
 
 function restoreDesignPreferences(): void {
-  const preferences = loadDesignPreferences(window.localStorage);
+  const storage = browserStorage();
+  const preferences = storage ? loadDesignPreferences(storage) : null;
   const remember = document.querySelector<HTMLInputElement>("#rememberDesign");
   const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
   if (!preferences) {
@@ -769,12 +779,14 @@ function handleDesignMemoryToggle(enabled: boolean): void {
     persistDesignIfEnabled();
     return;
   }
-  clearDesignPreferences(window.localStorage);
+  const storage = browserStorage();
+  if (storage) clearDesignPreferences(storage);
   if (status) status.textContent = "Design memory off";
 }
 
 function resetDesignControls(): void {
-  clearDesignPreferences(window.localStorage);
+  const storage = browserStorage();
+  if (storage) clearDesignPreferences(storage);
   const remember = document.querySelector<HTMLInputElement>("#rememberDesign");
   if (remember) remember.checked = false;
   applyDesignPreferences({
