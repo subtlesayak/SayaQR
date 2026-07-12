@@ -332,31 +332,6 @@ function renderApp(): void {
         </div>
       </details>
     </main>
-    <section class="about-sayaqr" aria-labelledby="aboutSayaQrTitle">
-      <div class="about-sayaqr-intro">
-        <p class="about-eyebrow">Private by design</p>
-        <h2 id="aboutSayaQrTitle">A free, open-source QR code generator that works offline</h2>
-        <p>SayaQR creates QR codes entirely in your browser. Your links, passwords, contact details, payment information, and files are never sent to a server.</p>
-      </div>
-      <div class="about-facts">
-        <details>
-          <summary>Is SayaQR private?</summary>
-          <p>Yes. QR content is processed locally on your device with no tracking, accounts, analytics, content uploads, or remote generation API.</p>
-        </details>
-        <details>
-          <summary>Can I use it offline?</summary>
-          <p>Yes. SayaQR is an installable progressive web app. After the first visit, its app shell is cached for offline QR creation and export.</p>
-        </details>
-        <details>
-          <summary>What QR codes and formats are supported?</summary>
-          <p>Create QR codes for text, URLs, Wi-Fi, email, SMS, phone, vCard contacts, UPI payments, calendar events, and locations. Export SVG, PNG, WebP, PDF, or batch ZIP files.</p>
-        </details>
-        <details>
-          <summary>Is SayaQR open source?</summary>
-          <p>Yes. SayaQR is MIT-licenseable and its source is available on GitHub. QR encoding uses Nayuki's MIT-licensed QR Code generator library.</p>
-        </details>
-      </div>
-    </section>
     <footer class="site-footer">
       <div class="footer-privacy" aria-label="Privacy guarantees">
         <span>Generated locally</span>
