@@ -1,6 +1,5 @@
 import "./style.css";
 import { detectQrContent, type DetectionResult } from "./lib/autodetect";
-import { suggestExportName } from "./lib/export-name";
 import { buildIntentPreview, type IntentPreview } from "./lib/intent-preview";
 import { decodeQrImageFile, rasterizeImageFileToPng } from "./lib/qr-decoder";
 import {
@@ -13,12 +12,22 @@ import { parseCsv, parseTextList, safeFileName, type CsvData } from "./lib/csv";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
 import { getScannabilityWarnings } from "./lib/scannability";
+import {
+  exportFilename,
+  isShareCancellation,
+  makeShareData,
+  removeShareTargetParams,
+  selectShareTargetValue,
+  supportsPngClipboard,
+  supportsPngFileShare,
+  type ExportExtension,
+} from "./lib/share";
 import { detectLogoPresetFromText, getLogoMismatchWarning, getLogoPreset, LOGO_PRESETS, logoPresetToDataUrl, type LogoPresetId } from "./lib/logo-presets";
 import {
   buildSvgFromQr,
   DEFAULT_RENDER_OPTIONS,
-  qrPdfBlob,
   svgBlob,
+  svgToPdfBlob,
   svgToRasterBlob,
   type FinderStyle,
   type QrRenderOptions,
@@ -36,7 +45,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9";
+const APP_VERSION = "1.9.1";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -330,16 +339,26 @@ function renderApp(): void {
           </details>
           <div id="warnings" class="warnings" aria-live="polite"></div>
         </section>
-        <div class="export-actions" aria-label="Export QR code">
+        <div class="export-actions" aria-label="Export and share QR code">
           <button class="primary-export" type="button" data-export="png" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download PNG</span></button>
-          <details class="more-formats">
-            <summary>More formats</summary>
-            <div class="more-format-list">
-              <button type="button" data-export="svg" disabled>SVG</button>
-              <button type="button" data-export="webp" disabled>WebP</button>
-              <button type="button" data-export="pdf" disabled>PDF</button>
-            </div>
-          </details>
+          <div class="secondary-export-actions">
+            <button id="copyImage" class="secondary-export-action" type="button" hidden disabled>Copy</button>
+            <button id="shareImage" class="secondary-export-action" type="button" hidden disabled>Share</button>
+            <details class="more-formats">
+              <summary>More formats</summary>
+              <div class="more-format-list">
+                <button type="button" data-export="svg" disabled>SVG</button>
+                <button type="button" data-export="webp" disabled>WebP</button>
+                <button type="button" data-export="pdf" disabled>PDF</button>
+              </div>
+              <ul class="format-guidance">
+                <li><strong>PNG</strong><span>Recommended for everyday use</span></li>
+                <li><strong>SVG</strong><span>Best for design and scalable printing</span></li>
+                <li><strong>PDF</strong><span>Print-ready; transparent backgrounds become white</span></li>
+                <li><strong>WebP</strong><span>Compact web image</span></li>
+              </ul>
+            </details>
+          </div>
         </div>
         <p id="exportStatus" class="export-status" aria-live="polite"></p>
         <details class="technical-payload">
@@ -829,6 +848,10 @@ function updateExportAvailability(available: boolean): void {
   });
   const mobileToggle = document.querySelector<HTMLButtonElement>("#mobileExportToggle");
   if (mobileToggle) mobileToggle.disabled = !available;
+  const copyButton = document.querySelector<HTMLButtonElement>("#copyImage");
+  const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
+  if (copyButton) copyButton.disabled = !available;
+  if (shareButton) shareButton.disabled = !available;
 }
 
 function updateMobilePreview(markup: string, statusText: string, state: "ready" | "empty" | "error"): void {
@@ -914,19 +937,90 @@ async function exportCurrent(format: string): Promise<void> {
     return;
   }
 
-  const name = suggestExportName(currentMode, collectPayloadFields());
-  const filename = name + "." + format;
+  const extension = format as ExportExtension;
+  const filename = exportFilename(currentMode, collectPayloadFields(), extension);
   if (status) status.textContent = "Preparing " + format.toUpperCase() + "...";
 
   try {
     if (format === "svg") downloadBlob(svgBlob(currentSvg), filename);
     if (format === "png") downloadBlob(await svgToRasterBlob(currentSvg, "image/png"), filename);
     if (format === "webp") downloadBlob(await svgToRasterBlob(currentSvg, "image/webp"), filename);
-    if (format === "pdf") downloadBlob(qrPdfBlob(currentPayload, getRenderOptions()), filename);
+    if (format === "pdf") downloadBlob(await svgToPdfBlob(currentSvg), filename);
     if (status) status.textContent = "Downloaded " + filename + ".";
   } catch {
     if (status) status.textContent = "Export failed. Try another format.";
   }
+}
+
+
+function updateNativeActionVisibility(): void {
+  const copyButton = document.querySelector<HTMLButtonElement>("#copyImage");
+  const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
+  if (copyButton) copyButton.hidden = !supportsPngClipboard();
+  if (shareButton) {
+    if (typeof File === "undefined") {
+      shareButton.hidden = true;
+    } else {
+      const probe = new File([new Uint8Array()], "sayaqr.png", { type: "image/png" });
+      shareButton.hidden = !supportsPngFileShare(probe);
+    }
+  }
+}
+
+async function copyCurrentImage(): Promise<void> {
+  const status = document.querySelector<HTMLParagraphElement>("#exportStatus");
+  if (!currentSvg || !currentPayload.trim() || !supportsPngClipboard()) return;
+  if (status) status.textContent = "Copying PNG...";
+  try {
+    const png = await svgToRasterBlob(currentSvg, "image/png");
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    if (status) status.textContent = "QR image copied";
+  } catch {
+    if (status) status.textContent = "Image clipboard is unavailable in this browser.";
+  }
+}
+
+async function shareCurrentImage(): Promise<void> {
+  const status = document.querySelector<HTMLParagraphElement>("#exportStatus");
+  if (!currentSvg || !currentPayload.trim()) return;
+  try {
+    const png = await svgToRasterBlob(currentSvg, "image/png");
+    const file = new File(
+      [png],
+      exportFilename(currentMode, collectPayloadFields(), "png"),
+      { type: "image/png" },
+    );
+    if (!supportsPngFileShare(file)) {
+      const button = document.querySelector<HTMLButtonElement>("#shareImage");
+      if (button) button.hidden = true;
+      return;
+    }
+    if (status) status.textContent = "Opening share sheet...";
+    await navigator.share(makeShareData(file));
+    if (status) status.textContent = "QR image shared";
+  } catch (error) {
+    if (isShareCancellation(error)) {
+      if (status) status.textContent = "";
+      return;
+    }
+    if (status) status.textContent = "Sharing is unavailable in this browser.";
+  }
+}
+
+function applyShareTargetFromUrl(): void {
+  const params = new URLSearchParams(window.location.search);
+  const hasShareParams = ["title", "text", "url"].some((key) => params.has(key));
+  if (!hasShareParams) return;
+
+  const value = selectShareTargetValue(params);
+  window.history.replaceState(null, "", removeShareTargetParams(window.location.href));
+  if (!value) return;
+
+  const quickContent = document.querySelector<HTMLTextAreaElement>("#autoContent");
+  if (!quickContent) return;
+  quickContent.value = value;
+  categorySelection = AUTO_CATEGORY_VALUE;
+  updateFromQuickContent(value);
 }
 
 function setMobileExportMenu(open: boolean): void {
@@ -983,12 +1077,12 @@ async function exportBatchZip(): Promise<void> {
       const payload = row[contentColumn]?.trim() ?? "";
       if (!payload) continue;
       const baseName = safeFileName(nameColumn ? row[nameColumn] ?? "" : "", `qr-${index + 1}`);
+      const svg = buildSvgFromQr(createQrCode(payload, options.ecc), options);
       if (format === "svg") {
-        files.push({ name: `${baseName}.svg`, data: buildSvgFromQr(createQrCode(payload, options.ecc), options) });
+        files.push({ name: `${baseName}.svg`, data: svg });
       } else if (format === "pdf") {
-        files.push({ name: `${baseName}.pdf`, data: qrPdfBlob(payload, options) });
+        files.push({ name: `${baseName}.pdf`, data: await svgToPdfBlob(svg) });
       } else {
-        const svg = buildSvgFromQr(createQrCode(payload, options.ecc), options);
         const mime = format === "webp" ? "image/webp" : "image/png";
         files.push({ name: `${baseName}.${extension}`, data: await svgToRasterBlob(svg, mime) });
       }
@@ -1008,6 +1102,16 @@ function wireEvents(): void {
 
     if (target.closest("#autoFixButton")) {
       applyAutomaticFix();
+      return;
+    }
+
+    if (target.closest("#copyImage")) {
+      void copyCurrentImage();
+      return;
+    }
+
+    if (target.closest("#shareImage")) {
+      void shareCurrentImage();
       return;
     }
 
@@ -1201,6 +1305,8 @@ renderModeTabs();
 renderPayloadFields();
 wireEvents();
 updateCustomColorPanel();
+updateNativeActionVisibility();
+applyShareTargetFromUrl();
 updateQr();
 registerServiceWorker();
 

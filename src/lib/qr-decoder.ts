@@ -20,6 +20,11 @@ export interface ImageDimensions {
   height: number;
 }
 
+export interface ImageCrop extends ImageDimensions {
+  x: number;
+  y: number;
+}
+
 export interface ImageFileOptions {
   maxDimension?: number;
   maxBytes?: number;
@@ -52,6 +57,21 @@ export function calculateContainedDimensions(width: number, height: number, maxD
   };
 }
 
+export function calculateScanCrops(width: number, height: number): ImageCrop[] {
+  if (width <= 0 || height <= 0) return [];
+  const cropWidth = Math.max(1, Math.round(width * 0.62));
+  const cropHeight = Math.max(1, Math.round(height * 0.62));
+  const maxX = Math.max(0, width - cropWidth);
+  const maxY = Math.max(0, height - cropHeight);
+  return [
+    { x: 0, y: 0, width: cropWidth, height: cropHeight },
+    { x: maxX, y: 0, width: cropWidth, height: cropHeight },
+    { x: 0, y: maxY, width: cropWidth, height: cropHeight },
+    { x: maxX, y: maxY, width: cropWidth, height: cropHeight },
+    { x: Math.round(maxX / 2), y: Math.round(maxY / 2), width: cropWidth, height: cropHeight },
+  ];
+}
+
 export function validateSvgMarkup(svg: string): void {
   const unsafeMarkup = /<\s*(?:script|foreignObject)\b|<!\s*(?:DOCTYPE|ENTITY)\b|\son[a-z]+\s*=|@import\b/i;
   if (unsafeMarkup.test(svg)) {
@@ -81,7 +101,7 @@ async function localImageBlob(file: File): Promise<Blob> {
 async function withImageCanvas<T>(
   file: File,
   options: Required<ImageFileOptions>,
-  useCanvas: (canvas: HTMLCanvasElement, context: CanvasRenderingContext2D) => T | Promise<T>,
+  useCanvas: (canvas: HTMLCanvasElement, context: CanvasRenderingContext2D, image: HTMLImageElement) => T | Promise<T>,
 ): Promise<T> {
   validateImageFile(file, options.maxBytes);
   if (typeof Image === "undefined" || typeof document === "undefined") {
@@ -112,7 +132,7 @@ async function withImageCanvas<T>(
 
     context.clearRect(0, 0, dimensions.width, dimensions.height);
     context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
-    return await useCanvas(canvas, context);
+    return await useCanvas(canvas, context, image);
   } finally {
     image.onload = null;
     image.onerror = null;
@@ -143,9 +163,33 @@ export async function decodeQrImageFile(
       maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES,
       maxDimension: options.maxDimension ?? DEFAULT_MAX_DIMENSION,
     },
-    (_canvas, context) => {
-      const imageData = context.getImageData(0, 0, context.canvas.width, context.canvas.height);
-      return decodeQrImageData(imageData);
+    async (canvas, context, image) => {
+      let decoded = decodeQrImageData(context.getImageData(0, 0, canvas.width, canvas.height));
+      if (decoded) return decoded;
+
+      const naturalWidth = image.naturalWidth || image.width;
+      const naturalHeight = image.naturalHeight || image.height;
+      for (const crop of calculateScanCrops(naturalWidth, naturalHeight)) {
+        const dimensions = calculateContainedDimensions(crop.width, crop.height, options.maxDimension ?? DEFAULT_MAX_DIMENSION);
+        canvas.width = dimensions.width;
+        canvas.height = dimensions.height;
+        context.clearRect(0, 0, dimensions.width, dimensions.height);
+        context.drawImage(
+          image,
+          crop.x,
+          crop.y,
+          crop.width,
+          crop.height,
+          0,
+          0,
+          dimensions.width,
+          dimensions.height,
+        );
+        decoded = decodeQrImageData(context.getImageData(0, 0, dimensions.width, dimensions.height));
+        if (decoded) return decoded;
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      }
+      return null;
     },
   );
 }
