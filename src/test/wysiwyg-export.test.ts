@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
-import manifest from "../../public/manifest.webmanifest";
+import manifestRaw from "../../public/manifest.webmanifest?raw";
 import mainSource from "../main.ts?raw";
 import renderSource from "../lib/render.ts?raw";
+import shareSource from "../lib/share.ts?raw";
 import { calculatePdfPageLayout } from "../lib/render";
+
+const manifest = JSON.parse(manifestRaw) as {
+  share_target?: {
+    action: string;
+    method: string;
+    enctype: string;
+    params: { title: string; text: string; url: string };
+  };
+};
 
 describe("WYSIWYG export contract", () => {
   it("calculates centered square PDF pages with point margins", () => {
@@ -42,7 +52,7 @@ describe("WYSIWYG export contract", () => {
     expect(mainSource).toContain('id="copyImage"');
     expect(mainSource).toContain('id="shareImage"');
     expect(mainSource).toContain("QR image copied");
-    expect(mainSource).toContain("QR code generated locally with SayaQR");
+    expect(shareSource).toContain("QR code generated locally with SayaQR");
     expect(mainSource).toContain("transparent backgrounds become white");
   });
 });
