@@ -107,10 +107,12 @@ export function validateBatchRows(
   canEncode: BatchEncoderCheck,
 ): BatchValidationResult {
   const payloads = data.rows.map((row) => String(row[contentColumn] ?? "").trim());
-  const requestedFilenames = data.rows.map((row, index) =>
-    safeFileName(filenameColumn ? String(row[filenameColumn] ?? "") : "", `qr-${index + 1}`),
-  );
-  const outputFilenames = resolveDuplicateFilenames(requestedFilenames);
+  const requestedFilenames = data.rows.map((row, index) => {
+    const requested = filenameColumn ? String(row[filenameColumn] ?? "").trim() : "";
+    return requested || `qr-${index + 1}`;
+  });
+  const safeFilenames = requestedFilenames.map((requested, index) => safeFileName(requested, `qr-${index + 1}`));
+  const outputFilenames = resolveDuplicateFilenames(safeFilenames);
   const urlColumn = requiresUrlValidation(contentColumn);
 
   const rows = data.rows.map<BatchValidationRow>((_, index) => {
@@ -154,7 +156,7 @@ export function validateBatchRows(
       };
     }
 
-    if (outputFilename !== requestedFilename) {
+    if (outputFilename !== safeFilenames[index]) {
       return {
         row: index + 1,
         status: "duplicate-filename",
