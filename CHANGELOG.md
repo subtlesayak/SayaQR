@@ -2,6 +2,20 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.4] - 2026-07-13
+
+### Fixed
+
+- Removed the large desktop gap between QR controls and Batch generation.
+- Increased slider touch targets for easier mobile use.
+- Simplified the empty preview so inactive scan and export controls stay hidden.
+
+### Changed
+
+- Compacted the desktop header while preserving the mobile live preview.
+- Clarified automatic QR type detection copy.
+- Placed Copy and More formats in an equal two-column row, with native Share below when supported.
+
 ## [1.9.3] - 2026-07-13
 
 ### Changed

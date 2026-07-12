@@ -6,6 +6,8 @@ describe("intent-first UI contract", () => {
     expect(mainSource).not.toContain('defaultValue: "Generated locally by SayaQR"');
     expect(mainSource).not.toContain('defaultValue: "https://github.com/subtlesayak/SayaQR"');
     expect(mainSource).toContain("Enter content to generate a QR code.");
+    expect(mainSource).toContain("Type or paste content; SayaQR detects the QR type automatically.");
+    expect(mainSource).not.toContain("Paste content above, then auto-detect its category.");
   });
 
   it("keeps advanced capabilities collapsed in native details", () => {
@@ -22,6 +24,14 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('data-export="svg"');
     expect(mainSource).toContain('data-export="webp"');
     expect(mainSource).toContain('data-export="pdf"');
+    expect(mainSource.indexOf('id="copyImage"')).toBeLessThan(mainSource.indexOf('<details class="more-formats">'));
+    expect(mainSource.indexOf('<details class="more-formats">')).toBeLessThan(mainSource.indexOf('id="shareImage"'));
+  });
+
+  it("keeps the desktop columns compact and simplifies the empty preview", () => {
+    expect(mainSource.indexOf('class="tool-surface controls"')).toBeLessThan(mainSource.indexOf('class="tool-surface batch-zone'));
+    expect(mainSource.indexOf('class="tool-surface batch-zone')).toBeLessThan(mainSource.indexOf('class="tool-surface preview-zone'));
+    expect(mainSource).toContain('previewZone.dataset.contentState = currentPayload.trim() ? "ready" : "empty"');
   });
 
   it("selects the square finder style by default", () => {

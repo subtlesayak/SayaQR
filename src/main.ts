@@ -61,7 +61,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.3";
+const APP_VERSION = "1.9.4";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -253,7 +253,8 @@ function renderApp(): void {
       </div>
     </header>
     <main class="workspace">
-      <section class="tool-surface controls" aria-label="QR controls">
+      <div class="control-column">
+        <section class="tool-surface controls" aria-label="QR controls">
         <div class="section-heading">
           <h2>Create QR</h2>
           <span id="modeHint"></span>
@@ -270,7 +271,7 @@ function renderApp(): void {
           <textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}"></textarea>
         </div>
         <p id="qrImportStatus" class="import-status" aria-live="polite"></p>
-        <p id="autoDetectStatus" class="detect-status" aria-live="polite">Paste content above, then auto-detect its category.</p>
+        <p id="autoDetectStatus" class="detect-status" aria-live="polite">Type or paste content; SayaQR detects the QR type automatically.</p>
 
         <details class="disclosure" id="editDetails">
           <summary>Edit details</summary>
@@ -335,6 +336,38 @@ function renderApp(): void {
         </details>
       </section>
 
+
+      <details class="tool-surface batch-zone disclosure batch-disclosure" aria-label="Batch mode">
+        <summary><span>Batch generate</span><span id="batchSummary">No file loaded</span></summary>
+        <div class="disclosure-body">
+          <div class="batch-intro">
+            <p>Use CSV columns or a TXT list. Files are read and generated only in this browser.</p>
+            <button id="downloadSampleCsv" class="secondary-action" type="button">Download sample CSV</button>
+          </div>
+          <div class="batch-grid">
+            <label class="field field-wide"><span>CSV or TXT file</span><input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" /></label>
+            <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
+            <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
+            <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
+            <button id="exportZip" type="button" disabled>Export ZIP</button>
+          </div>
+          <div id="batchProgress" class="batch-progress" hidden>
+            <progress id="batchProgressBar" value="0" max="1"></progress>
+            <div class="batch-progress-copy" aria-live="polite">
+              <span id="batchGeneratedCount">0 generated</span>
+              <span id="batchSkippedCount">0 skipped</span>
+            </div>
+            <button id="cancelBatch" class="secondary-action" type="button">Cancel</button>
+          </div>
+          <div id="batchPreview" class="batch-preview"></div>
+          <details id="batchReportDetails" class="batch-report-details" hidden>
+            <summary>Full validation report</summary>
+            <textarea id="batchFullReport" readonly rows="8" aria-label="Full batch validation report"></textarea>
+          </details>
+        </div>
+      </details>
+      </div>
+
       <section class="tool-surface preview-zone" aria-label="QR preview">
         <div class="preview-header">
           <div>
@@ -368,7 +401,6 @@ function renderApp(): void {
           <button class="primary-export" type="button" data-export="png" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download PNG</span></button>
           <div class="secondary-export-actions">
             <button id="copyImage" class="secondary-export-action" type="button" hidden disabled>Copy</button>
-            <button id="shareImage" class="secondary-export-action" type="button" hidden disabled>Share</button>
             <details class="more-formats">
               <summary>More formats</summary>
               <div class="more-format-list">
@@ -383,6 +415,7 @@ function renderApp(): void {
                 <li><strong>WebP</strong><span>Compact web image</span></li>
               </ul>
             </details>
+            <button id="shareImage" class="secondary-export-action" type="button" hidden disabled>Share</button>
           </div>
         </div>
         <p id="exportStatus" class="export-status" aria-live="polite"></p>
@@ -392,35 +425,7 @@ function renderApp(): void {
         </details>
       </section>
 
-      <details class="tool-surface batch-zone disclosure batch-disclosure" aria-label="Batch mode">
-        <summary><span>Batch generate</span><span id="batchSummary">No file loaded</span></summary>
-        <div class="disclosure-body">
-          <div class="batch-intro">
-            <p>Use CSV columns or a TXT list. Files are read and generated only in this browser.</p>
-            <button id="downloadSampleCsv" class="secondary-action" type="button">Download sample CSV</button>
-          </div>
-          <div class="batch-grid">
-            <label class="field field-wide"><span>CSV or TXT file</span><input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" /></label>
-            <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
-            <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
-            <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
-            <button id="exportZip" type="button" disabled>Export ZIP</button>
-          </div>
-          <div id="batchProgress" class="batch-progress" hidden>
-            <progress id="batchProgressBar" value="0" max="1"></progress>
-            <div class="batch-progress-copy" aria-live="polite">
-              <span id="batchGeneratedCount">0 generated</span>
-              <span id="batchSkippedCount">0 skipped</span>
-            </div>
-            <button id="cancelBatch" class="secondary-action" type="button">Cancel</button>
-          </div>
-          <div id="batchPreview" class="batch-preview"></div>
-          <details id="batchReportDetails" class="batch-report-details" hidden>
-            <summary>Full validation report</summary>
-            <textarea id="batchFullReport" readonly rows="8" aria-label="Full batch validation report"></textarea>
-          </details>
-        </div>
-      </details>
+
     </main>
     <footer class="site-footer">
       <div class="footer-privacy" aria-label="Privacy guarantees">
@@ -461,9 +466,13 @@ function renderModeTabs(): void {
 function updateModeHint(): void {
   const hint = document.querySelector<HTMLSpanElement>("#modeHint");
   if (!hint) return;
+  const hasQuickContent = Boolean(document.querySelector<HTMLTextAreaElement>("#autoContent")?.value.trim());
+  const detectedLabel = QR_MODES.find((mode) => mode.id === currentMode)?.label ?? "Plain text";
   hint.textContent =
     categorySelection === AUTO_CATEGORY_VALUE
-      ? `Auto-detecting as ${QR_MODES.find((mode) => mode.id === currentMode)?.label ?? "Plain text"}`
+      ? hasQuickContent
+        ? `Detected: ${detectedLabel}`
+        : "Automatic type detection"
       : QR_MODES.find((mode) => mode.id === currentMode)?.hint ?? "";
 }
 function renderPayloadFields(): void {
@@ -520,7 +529,7 @@ function updateDetectionStatus(result?: DetectionResult): void {
   }
   status.textContent = input.value.trim()
     ? `Looks like ${detection.label}. Confidence: ${detection.confidence}.`
-    : "Paste content above, then auto-detect its category.";
+    : "Type or paste content; SayaQR detects the QR type automatically.";
 }
 
 function quickFieldsForMode(mode: QrMode, rawValue: string, detection: DetectionResult): PayloadFields {
@@ -1067,6 +1076,8 @@ function updateQr(): void {
   const options = getRenderOptions();
   const fields = collectPayloadFields();
   currentPayload = formatPayload(currentMode, fields);
+  const previewZone = document.querySelector<HTMLElement>(".preview-zone");
+  if (previewZone) previewZone.dataset.contentState = currentPayload.trim() ? "ready" : "empty";
   output.value = currentPayload;
   renderIntentPreview(buildIntentPreview(currentMode, fields, currentPayload), currentPayload);
   if (exportStatus) exportStatus.textContent = "";
@@ -1092,6 +1103,7 @@ function updateQr(): void {
     renderWarnings(options, currentPayload.length);
     scheduleLocalScanCheck();
   } catch (error) {
+    if (previewZone) previewZone.dataset.contentState = "error";
     currentSvg = "";
     preview.innerHTML = "<div class=\"empty-state error\">This content is too long for a QR code.</div>";
     stats.textContent = "Data too long";
