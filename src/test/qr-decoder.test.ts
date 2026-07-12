@@ -22,6 +22,9 @@ describe("local QR image validation", () => {
   it("rejects scriptable or remotely-referencing SVG markup", () => {
     expect(() => validateSvgMarkup('<svg><script>alert(1)</script></svg>')).toThrow("active or remote");
     expect(() => validateSvgMarkup('<svg><image href="https://example.com/logo.png"/></svg>')).toThrow("active or remote");
+    expect(() => validateSvgMarkup('<svg><image href="ftp://example.com/logo.png"/></svg>')).toThrow("active or remote");
+    expect(() => validateSvgMarkup('<svg><image href="data:image/svg+xml;base64,PHN2Zy8+"/></svg>')).toThrow("active or remote");
+    expect(() => validateSvgMarkup('<svg><defs><linearGradient id="g"/></defs><rect fill="url(#g)"/></svg>')).not.toThrow();
     expect(() => validateSvgMarkup('<svg><rect width="10" height="10" fill="#000"/></svg>')).not.toThrow();
   });
 
