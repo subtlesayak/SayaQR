@@ -1,6 +1,6 @@
 {
   "name": "sayaqr",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "private": true,
   "type": "module",
   "description": "Privacy-first offline QR code generator built with Vite and TypeScript.",
