@@ -1,6 +1,5 @@
 import "./style.css";
 import { detectQrContent, type DetectionResult } from "./lib/autodetect";
-import { suggestExportName } from "./lib/export-name";
 import { buildIntentPreview, type IntentPreview } from "./lib/intent-preview";
 import { decodeQrImageFile, rasterizeImageFileToPng } from "./lib/qr-decoder";
 import {
@@ -959,8 +958,12 @@ function updateNativeActionVisibility(): void {
   const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
   if (copyButton) copyButton.hidden = !supportsPngClipboard();
   if (shareButton) {
-    const probe = new File([new Uint8Array()], "sayaqr.png", { type: "image/png" });
-    shareButton.hidden = !supportsPngFileShare(probe);
+    if (typeof File === "undefined") {
+      shareButton.hidden = true;
+    } else {
+      const probe = new File([new Uint8Array()], "sayaqr.png", { type: "image/png" });
+      shareButton.hidden = !supportsPngFileShare(probe);
+    }
   }
 }
 
