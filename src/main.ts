@@ -1,5 +1,7 @@
 import "./style.css";
 import { detectQrContent, type DetectionResult } from "./lib/autodetect";
+import { suggestExportName } from "./lib/export-name";
+import { buildIntentPreview, type IntentPreview } from "./lib/intent-preview";
 import { parseCsv, parseTextList, safeFileName, type CsvData } from "./lib/csv";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
@@ -27,7 +29,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.7";
+const APP_VERSION = "1.8";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -57,8 +59,8 @@ const QUICK_FIELD_BY_MODE: Record<QrMode, string> = {
   geo: "label",
 };
 const MODE_FIELDS: Record<QrMode, FieldConfig[]> = {
-  text: [{ name: "text", label: "Text", type: "textarea", rows: 6, defaultValue: "Generated locally by SayaQR" }],
-  url: [{ name: "url", label: "URL", type: "url", placeholder: "example.com", defaultValue: "https://github.com/subtlesayak/SayaQR" }],
+  text: [{ name: "text", label: "Text", type: "textarea", rows: 6 }],
+  url: [{ name: "url", label: "URL", type: "url", placeholder: "example.com" }],
   wifi: [
     { name: "ssid", label: "Network name", type: "text", placeholder: "Cafe Wi-Fi" },
     {
@@ -126,7 +128,7 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
 const appRoot = app;
 
-let currentMode: QrMode = "url";
+let currentMode: QrMode = "text";
 let categorySelection: CategorySelection = AUTO_CATEGORY_VALUE;
 let logoDataUrl = "";
 let logoSelection: LogoPresetId | "custom" | "none" = "none";
@@ -199,16 +201,16 @@ function renderApp(): void {
           <span id="mobileQrPreview" class="mobile-qr-preview" aria-hidden="true"></span>
           <span class="mobile-preview-copy">
             <strong>Live preview</strong>
-            <span id="mobileQrStatus">Ready</span>
+            <span id="mobileQrStatus">Waiting for content</span>
           </span>
         </button>
         <div class="mobile-export">
-          <button id="mobileExportToggle" class="mobile-export-toggle" type="button" aria-label="Download QR code" aria-haspopup="true" aria-expanded="false"><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download</span></button>
+          <button id="mobileExportToggle" class="mobile-export-toggle" type="button" aria-label="Download QR code" aria-haspopup="true" aria-expanded="false" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download</span></button>
           <div id="mobileExportMenu" class="mobile-export-menu" role="menu" hidden>
-            <button type="button" data-export="svg" role="menuitem">SVG</button>
-            <button type="button" data-export="png" role="menuitem">PNG</button>
-            <button type="button" data-export="webp" role="menuitem">WebP</button>
-            <button type="button" data-export="pdf" role="menuitem">PDF</button>
+            <button type="button" data-export="png" role="menuitem" disabled>PNG</button>
+            <button type="button" data-export="svg" role="menuitem" disabled>SVG</button>
+            <button type="button" data-export="webp" role="menuitem" disabled>WebP</button>
+            <button type="button" data-export="pdf" role="menuitem" disabled>PDF</button>
           </div>
         </div>
       </div>
@@ -216,92 +218,119 @@ function renderApp(): void {
     <main class="workspace">
       <section class="tool-surface controls" aria-label="QR controls">
         <div class="section-heading">
-          <h2>Content</h2>
+          <h2>Create QR</h2>
           <span id="modeHint"></span>
         </div>
         <label class="field field-wide quick-content" for="autoContent"><span>Quick content</span><textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}"></textarea></label>
-        <div class="category-row">
-          <label class="field category-select" for="modeSelect"><span>Category</span><select id="modeSelect" aria-label="QR category"></select></label>
-        </div>
         <p id="autoDetectStatus" class="detect-status" aria-live="polite">Paste content above, then auto-detect its category.</p>
-        <form id="payloadForm" class="payload-grid"></form>
 
-        <div class="section-heading compact"><h2>Design</h2></div>
-        <div class="design-grid">
-          <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
-          <div id="customColorPanel" class="custom-color-panel" hidden>
-            <label class="field design-pair color-control" for="foregroundHex">
-              <span>Foreground</span>
-              <span class="color-shell">
-                <span class="color-swatch-wrap">
-                  <input id="foreground" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Foreground color picker" />
-                  <span id="foregroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.foreground}" aria-hidden="true"></span>
-                </span>
-                <input id="foregroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Foreground hex color" />
-              </span>
-            </label>
-            <label class="field design-pair color-control" for="backgroundHex">
-              <span>Background</span>
-              <span class="color-shell">
-                <span class="color-swatch-wrap">
-                  <input id="background" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" aria-label="Background color picker" />
-                  <span id="backgroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.background}" aria-hidden="true"></span>
-                </span>
-                <input id="backgroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.background}" inputmode="text" spellcheck="false" aria-label="Background hex color" />
-              </span>
-            </label>
-            <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
-          </div>
-          <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
-          <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
-          <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
-          <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
-          <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
-          <div class="field field-wide logo-picker">
-            <div class="logo-picker-header">
-              <span>Center logo</span>
+        <details class="disclosure" id="editDetails">
+          <summary>Edit details</summary>
+          <div class="disclosure-body">
+            <div class="category-row">
+              <label class="field category-select" for="modeSelect"><span>Category</span><select id="modeSelect" aria-label="QR category"></select></label>
             </div>
-            <div class="logo-select-row">
-              <span id="logoPresetPreview" class="logo-preset-preview" aria-hidden="true">${renderSelectedLogoPreview()}</span>
-              <label class="field logo-select-field" for="logoPresetSelect"><span>Logo preset</span><select id="logoPresetSelect" aria-label="Logo preset">${renderLogoPresetOptions()}</select></label>
-            </div>
-            <p class="logo-source-note">SVG marks stay local. Brand trademarks belong to their owners.</p>
-            <label class="logo-upload-field"><span>Upload custom</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
+            <form id="payloadForm" class="payload-grid"></form>
           </div>
-          <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
-        </div>
+        </details>
+
+        <details class="disclosure" id="customizeDetails">
+          <summary>Customize</summary>
+          <div class="disclosure-body design-grid">
+            <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
+            <div id="customColorPanel" class="custom-color-panel" hidden>
+              <label class="field design-pair color-control" for="foregroundHex">
+                <span>Foreground</span>
+                <span class="color-shell">
+                  <span class="color-swatch-wrap">
+                    <input id="foreground" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Foreground color picker" />
+                    <span id="foregroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.foreground}" aria-hidden="true"></span>
+                  </span>
+                  <input id="foregroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Foreground hex color" />
+                </span>
+              </label>
+              <label class="field design-pair color-control" for="backgroundHex">
+                <span>Background</span>
+                <span class="color-shell">
+                  <span class="color-swatch-wrap">
+                    <input id="background" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.background}" aria-label="Background color picker" />
+                    <span id="backgroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.background}" aria-hidden="true"></span>
+                  </span>
+                  <input id="backgroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.background}" inputmode="text" spellcheck="false" aria-label="Background hex color" />
+                </span>
+              </label>
+              <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
+            </div>
+            <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
+            <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
+            <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
+            <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square">Square</option><option value="rounded" selected>Rounded</option><option value="circle">Circle</option></select></label>
+            <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
+            <div class="field field-wide logo-picker">
+              <div class="logo-picker-header"><span>Center logo</span></div>
+              <div class="logo-select-row">
+                <span id="logoPresetPreview" class="logo-preset-preview" aria-hidden="true">${renderSelectedLogoPreview()}</span>
+                <label class="field logo-select-field" for="logoPresetSelect"><span>Logo preset</span><select id="logoPresetSelect" aria-label="Logo preset">${renderLogoPresetOptions()}</select></label>
+              </div>
+              <p class="logo-source-note">SVG marks stay local. Brand trademarks belong to their owners.</p>
+              <label class="logo-upload-field"><span>Upload custom</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
+            </div>
+            <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
+          </div>
+        </details>
       </section>
 
       <section class="tool-surface preview-zone" aria-label="QR preview">
         <div class="preview-header">
           <div>
             <h2>Preview</h2>
-            <p id="qrStats">Ready</p>
+            <p id="qrStats">Waiting for content</p>
           </div>
           <div id="offlineStatus" class="status-pill">Offline ready</div>
         </div>
         <div id="qrPreview" class="qr-preview"></div>
-        <div id="warnings" class="warnings" aria-live="polite"></div>
-        <label class="payload-output" for="payloadOutput"><span>Encoded payload</span><textarea id="payloadOutput" readonly rows="4"></textarea></label>
-        <div class="export-row" aria-label="Export formats">
-          <button type="button" data-export="svg">SVG</button>
-          <button type="button" data-export="png">PNG</button>
-          <button type="button" data-export="webp">WebP</button>
-          <button type="button" data-export="pdf">PDF</button>
+        <section id="intentPreview" class="intent-preview is-empty" aria-live="polite">
+          <span class="intent-badge">Ready</span>
+          <h3>Your QR intent will appear here</h3>
+        </section>
+        <section id="scanChecks" class="scan-checks" data-state="empty">
+          <div class="scan-checks-heading">
+            <h3>Scan checks</h3>
+            <span id="scanCheckStatus">Waiting for content</span>
+          </div>
+          <div id="warnings" class="warnings" aria-live="polite"></div>
+        </section>
+        <div class="export-actions" aria-label="Export QR code">
+          <button class="primary-export" type="button" data-export="png" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download PNG</span></button>
+          <details class="more-formats">
+            <summary>More formats</summary>
+            <div class="more-format-list">
+              <button type="button" data-export="svg" disabled>SVG</button>
+              <button type="button" data-export="webp" disabled>WebP</button>
+              <button type="button" data-export="pdf" disabled>PDF</button>
+            </div>
+          </details>
         </div>
+        <p id="exportStatus" class="export-status" aria-live="polite"></p>
+        <details class="technical-payload">
+          <summary>Technical payload</summary>
+          <label class="payload-output" for="payloadOutput"><span>Encoded payload</span><textarea id="payloadOutput" readonly rows="4"></textarea></label>
+        </details>
       </section>
 
-      <section class="tool-surface batch-zone" aria-label="Batch mode">
-        <div class="section-heading"><h2>Batch CSV / TXT</h2><span id="batchSummary">No file loaded</span></div>
-        <div class="batch-grid">
-          <label class="field field-wide"><span>CSV or TXT file</span><input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" /></label>
-          <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
-          <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
-          <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
-          <button id="exportZip" type="button" disabled>Export ZIP</button>
+      <details class="tool-surface batch-zone disclosure batch-disclosure" aria-label="Batch mode">
+        <summary><span>Batch generate</span><span id="batchSummary">No file loaded</span></summary>
+        <div class="disclosure-body">
+          <div class="batch-grid">
+            <label class="field field-wide"><span>CSV or TXT file</span><input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" /></label>
+            <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
+            <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
+            <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
+            <button id="exportZip" type="button" disabled>Export ZIP</button>
+          </div>
+          <div id="batchPreview" class="batch-preview"></div>
         </div>
-        <div id="batchPreview" class="batch-preview"></div>
-      </section>
+      </details>
     </main>
     <footer class="site-footer">
       <div class="footer-privacy" aria-label="Privacy guarantees">
@@ -572,9 +601,36 @@ function updateSliderLabels(): void {
   document.querySelector("#logoSizeValue")!.textContent = `${Math.round(logoScale * 100)}%`;
 }
 
+function renderIntentPreview(preview: IntentPreview, payload: string): void {
+  const container = document.querySelector<HTMLElement>("#intentPreview");
+  if (!container) return;
+
+  if (!payload.trim()) {
+    container.classList.add("is-empty");
+    container.innerHTML = "<span class=\"intent-badge\">Ready</span><h3>Your QR intent will appear here</h3>";
+    return;
+  }
+
+  container.classList.remove("is-empty");
+  const details = preview.details.length
+    ? "<ul class=\"intent-details\">" + preview.details.map((item) => "<li>" + escapeHtml(item) + "</li>").join("") + "</ul>"
+    : "";
+  const warnings = preview.warnings.length
+    ? "<ul class=\"intent-warnings\">" + preview.warnings.map((item) => "<li><strong>Check:</strong> " + escapeHtml(item) + "</li>").join("") + "</ul>"
+    : "";
+
+  container.innerHTML =
+    "<span class=\"intent-badge\">" + escapeHtml(preview.badge) + "</span>" +
+    "<h3>" + escapeHtml(preview.title) + "</h3>" +
+    details +
+    warnings;
+}
+
 function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: string[] = []): void {
   const warnings = document.querySelector<HTMLDivElement>("#warnings");
-  if (!warnings) return;
+  const status = document.querySelector<HTMLSpanElement>("#scanCheckStatus");
+  const section = document.querySelector<HTMLElement>("#scanChecks");
+  if (!warnings || !status || !section) return;
   const items = getScannabilityWarnings({
     foreground: options.foreground,
     background: options.background,
@@ -589,9 +645,23 @@ function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: 
   if (logoWarning) renderedItems.push({ level: "warning", message: logoWarning });
   for (const message of extra) renderedItems.push({ level: "danger", message });
 
+  section.dataset.state = !currentPayload.trim() ? "empty" : renderedItems.length ? "issues" : "clear";
+  status.textContent = !currentPayload.trim()
+    ? "Waiting for content"
+    : renderedItems.length
+      ? renderedItems.length + (renderedItems.length === 1 ? " issue" : " issues")
+      : "No issues found";
   warnings.innerHTML = renderedItems
-    .map((item) => `<div class="warning ${item.level}">${escapeHtml(item.message)}</div>`)
+    .map((item) => "<div class=\"warning " + item.level + "\"><strong>" + (item.level === "danger" ? "Error:" : item.level === "warning" ? "Warning:" : "Note:") + "</strong> " + escapeHtml(item.message) + "</div>")
     .join("");
+}
+
+function updateExportAvailability(available: boolean): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-export]").forEach((button) => {
+    button.disabled = !available;
+  });
+  const mobileToggle = document.querySelector<HTMLButtonElement>("#mobileExportToggle");
+  if (mobileToggle) mobileToggle.disabled = !available;
 }
 
 function updateMobilePreview(markup: string, statusText: string, state: "ready" | "empty" | "error"): void {
@@ -610,17 +680,22 @@ function updateQr(): void {
   const preview = document.querySelector<HTMLDivElement>("#qrPreview");
   const stats = document.querySelector<HTMLParagraphElement>("#qrStats");
   const output = document.querySelector<HTMLTextAreaElement>("#payloadOutput");
+  const exportStatus = document.querySelector<HTMLParagraphElement>("#exportStatus");
   if (!preview || !stats || !output) return;
 
   const options = getRenderOptions();
-  currentPayload = formatPayload(currentMode, collectPayloadFields());
+  const fields = collectPayloadFields();
+  currentPayload = formatPayload(currentMode, fields);
   output.value = currentPayload;
+  renderIntentPreview(buildIntentPreview(currentMode, fields, currentPayload), currentPayload);
+  if (exportStatus) exportStatus.textContent = "";
 
   if (!currentPayload.trim()) {
-    preview.innerHTML = `<div class="empty-state">Enter content to generate a QR code.</div>`;
+    preview.innerHTML = "<div class=\"empty-state\">Enter content to generate a QR code.</div>";
     stats.textContent = "Waiting for content";
     currentSvg = "";
-    updateMobilePreview(`<span class="mini-empty">QR</span>`, "Waiting for content", "empty");
+    updateMobilePreview("<span class=\"mini-empty\">QR</span>", "Waiting for content", "empty");
+    updateExportAvailability(false);
     renderWarnings(options, 0);
     return;
   }
@@ -629,14 +704,16 @@ function updateQr(): void {
     const qr = createQrCode(currentPayload, options.ecc);
     currentSvg = buildSvgFromQr(qr, options);
     preview.innerHTML = currentSvg;
-    stats.textContent = `Version ${qr.version} | ${qr.size} x ${qr.size} modules | ${currentPayload.length} chars`;
-    updateMobilePreview(currentSvg, `${qr.size} x ${qr.size} modules | ${currentPayload.length} chars`, "ready");
+    stats.textContent = "Version " + qr.version + " | " + qr.size + " x " + qr.size + " modules | " + currentPayload.length + " chars";
+    updateMobilePreview(currentSvg, qr.size + " x " + qr.size + " modules | " + currentPayload.length + " chars", "ready");
+    updateExportAvailability(true);
     renderWarnings(options, currentPayload.length);
   } catch (error) {
     currentSvg = "";
-    preview.innerHTML = `<div class="empty-state error">This content is too long for a QR code.</div>`;
+    preview.innerHTML = "<div class=\"empty-state error\">This content is too long for a QR code.</div>";
     stats.textContent = "Data too long";
-    updateMobilePreview(`<span class="mini-empty">!</span>`, "Data too long", "error");
+    updateMobilePreview("<span class=\"mini-empty\">!</span>", "Data too long", "error");
+    updateExportAvailability(false);
     renderWarnings(options, currentPayload.length, [error instanceof Error ? error.message : "QR generation failed"]);
   }
 }
@@ -661,12 +738,25 @@ function downloadBlob(blob: Blob, filename: string): void {
 }
 
 async function exportCurrent(format: string): Promise<void> {
-  if (!currentPayload.trim() || !currentSvg) return;
-  const name = safeFileName(currentMode, "sayaqr");
-  if (format === "svg") downloadBlob(svgBlob(currentSvg), `${name}.svg`);
-  if (format === "png") downloadBlob(await svgToRasterBlob(currentSvg, "image/png"), `${name}.png`);
-  if (format === "webp") downloadBlob(await svgToRasterBlob(currentSvg, "image/webp"), `${name}.webp`);
-  if (format === "pdf") downloadBlob(qrPdfBlob(currentPayload, getRenderOptions()), `${name}.pdf`);
+  const status = document.querySelector<HTMLParagraphElement>("#exportStatus");
+  if (!currentPayload.trim() || !currentSvg) {
+    if (status) status.textContent = "Enter content before downloading.";
+    return;
+  }
+
+  const name = suggestExportName(currentMode, collectPayloadFields());
+  const filename = name + "." + format;
+  if (status) status.textContent = "Preparing " + format.toUpperCase() + "...";
+
+  try {
+    if (format === "svg") downloadBlob(svgBlob(currentSvg), filename);
+    if (format === "png") downloadBlob(await svgToRasterBlob(currentSvg, "image/png"), filename);
+    if (format === "webp") downloadBlob(await svgToRasterBlob(currentSvg, "image/webp"), filename);
+    if (format === "pdf") downloadBlob(qrPdfBlob(currentPayload, getRenderOptions()), filename);
+    if (status) status.textContent = "Downloaded " + filename + ".";
+  } catch {
+    if (status) status.textContent = "Export failed. Try another format.";
+  }
 }
 
 function setMobileExportMenu(open: boolean): void {
