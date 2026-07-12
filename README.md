@@ -10,7 +10,10 @@ Its default flow is intentionally simple: paste content, understand the detected
 - Offline PWA with service worker and web app manifest
 - Nayuki QR-Code-generator core vendored in `src/lib/nayuki-qrcodegen.ts`
 - QR modes: plain text, URL, Wi-Fi, email, SMS, phone, vCard contact, UPI payment, event/calendar, and geo location
-- One-click PNG download, plus SVG, WebP, and PDF in More formats
+- One-click PNG download, plus SVG, WebP, and WYSIWYG PDF in More formats
+- Copy PNG directly to the image clipboard when supported
+- Native PNG file sharing with content-aware filenames when supported
+- Installed-PWA share target for links and text shared into SayaQR
 - Human-readable intent previews with local warnings for risky links, payments, events, Wi-Fi, and coordinates
 - Progressive disclosure for structured fields, customization, technical payloads, and batch generation
 - Content-aware export filenames based on the QR intent
@@ -28,6 +31,16 @@ Its default flow is intentionally simple: paste content, understand the detected
 Imported QR images stay on the device and are decoded locally with the bundled jsQR library. Pasted screenshots, dropped images, custom logos, generated scan variants, and decoded payloads are never uploaded.
 
 Scan confidence is an advisory local test, not a guarantee that every camera or scanning app will read the QR. The six simulations help identify common size, blur, contrast, and rotation risks before printing or sharing. Simulation canvases are released after each check and are not stored.
+
+Mobile QR photo import uses bounded local crop passes after the full-image attempt, improving detection when a QR occupies only part of a phone photo while keeping every canvas at or below 1600px.
+
+## WYSIWYG Export And Sharing
+
+SVG, PNG, WebP, PDF, clipboard copy, and native sharing all use the current styled SVG as their canonical source. PDF export rasterizes that SVG to a lossless PNG of at least 1600 x 1600 pixels, embeds it without JPEG recompression, and preserves colors, background, rounded modules, finder style, logos, logo backing, quiet zone, and proportions. Transparent QR backgrounds are rendered on white for PDF because ordinary printed paper has a background.
+
+Copy image appears only when PNG clipboard writing is supported. Share appears only when the browser supports sharing a PNG file. Share cancellation is silent, unsupported features remain hidden, and neither action silently falls back to downloading. The generic share message never includes the encoded payload.
+
+When installed as a PWA, SayaQR can receive shared URLs or text through its relative GET share target. Incoming share parameters are auto-detected locally and immediately removed from the address bar with `history.replaceState`. Browser feature detection provides graceful fallback where clipboard, file sharing, or PWA share targets are unavailable.
 
 ## Local Development
 
