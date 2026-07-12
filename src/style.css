@@ -39,7 +39,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 22px clamp(16px, 4vw, 44px);
+  padding: 14px clamp(16px, 4vw, 44px);
   border-bottom: 1px solid #dde3ee;
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(16px);
@@ -157,6 +157,13 @@ h2 {
   align-items: start;
 }
 
+.control-column {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
 .tool-surface {
   min-width: 0;
   max-width: 100%;
@@ -174,11 +181,7 @@ h2 {
 
 .preview-zone {
   grid-column: 2;
-  grid-row: 1 / span 2;
-}
-
-.batch-zone {
-  grid-column: 1;
+  grid-row: 1;
 }
 
 .section-heading,
@@ -517,7 +520,11 @@ input[type="color"] {
 }
 
 input[type="range"] {
+  min-height: 42px;
+  margin: 0;
   accent-color: #0f766e;
+  cursor: pointer;
+  touch-action: pan-y;
 }
 
 .logo-picker {
@@ -648,13 +655,25 @@ input[type="file"] {
 
 .preview-zone {
   position: sticky;
-  top: 106px;
-  height: calc(100vh - 124px);
+  top: 90px;
+  height: calc(100vh - 108px);
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(220px, 1fr) auto auto auto auto auto;
   overflow: auto;
   scrollbar-width: none;
+}
+
+.preview-zone[data-content-state="empty"] {
+  grid-template-rows: auto minmax(320px, 1fr);
+}
+
+.preview-zone[data-content-state="empty"] .intent-preview,
+.preview-zone[data-content-state="empty"] .scan-checks,
+.preview-zone[data-content-state="empty"] .export-actions,
+.preview-zone[data-content-state="empty"] .export-status,
+.preview-zone[data-content-state="empty"] .technical-payload {
+  display: none;
 }
 
 .preview-zone::-webkit-scrollbar {
@@ -1168,7 +1187,7 @@ input[type="file"] {
 
 .export-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.8fr);
+  grid-template-columns: 1fr;
   align-items: start;
   gap: 10px;
 }
@@ -1180,6 +1199,11 @@ input[type="file"] {
 }
 
 .secondary-export-actions .more-formats {
+  grid-column: auto;
+}
+
+#copyImage[hidden] + .more-formats,
+#shareImage:not([hidden]) {
   grid-column: 1 / -1;
 }
 
@@ -1326,6 +1350,22 @@ summary {
 @media (max-width: 1040px) {
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .control-column {
+    display: contents;
+  }
+
+  .controls {
+    order: 1;
+  }
+
+  .preview-zone {
+    order: 2;
+  }
+
+  .batch-zone {
+    order: 3;
   }
 
   .preview-zone,
