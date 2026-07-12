@@ -53,9 +53,21 @@ export function calculateContainedDimensions(width: number, height: number, maxD
 }
 
 export function validateSvgMarkup(svg: string): void {
-  const unsafeMarkup = /<\s*(?:script|foreignObject)\b|\son[a-z]+\s*=|(?:href|xlink:href)\s*=\s*["']\s*(?:javascript:|https?:|\/\/)|@import\b|url\(\s*["']?\s*(?:https?:|\/\/)/i;
+  const unsafeMarkup = /<\s*(?:script|foreignObject)\b|<!\s*(?:DOCTYPE|ENTITY)\b|\son[a-z]+\s*=|@import\b/i;
   if (unsafeMarkup.test(svg)) {
     throw new Error("This SVG contains unsupported active or remote content.");
+  }
+
+  const safeReference = /^(?:#|data:image\/(?:png|jpe?g|webp|gif);)/i;
+  for (const match of svg.matchAll(/(?:href|xlink:href)\s*=\s*["']\s*([^"']+)/gi)) {
+    if (!safeReference.test(match[1].trim())) {
+      throw new Error("This SVG contains unsupported active or remote content.");
+    }
+  }
+  for (const match of svg.matchAll(/url\(\s*["']?\s*([^"'\s)]+)/gi)) {
+    if (!safeReference.test(match[1].trim())) {
+      throw new Error("This SVG contains unsupported active or remote content.");
+    }
   }
 }
 
