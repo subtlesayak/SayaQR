@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import mainSource from "../main.ts?raw";
-import styleSource from "../style.css?inline";
+import { readFileSync } from "node:fs";
+
+const styleSource = readFileSync(new URL("../style.css", import.meta.url), "utf8");
 
 describe("intent-first UI contract", () => {
   it("starts empty without demo payload defaults", () => {
