@@ -8,7 +8,23 @@ import {
   testQrSvg,
   type ScanConfidenceResult,
 } from "./lib/scan-confidence";
-import { parseCsv, parseTextList, safeFileName, type CsvData } from "./lib/csv";
+import { parseCsv, parseTextList, type CsvData } from "./lib/csv";
+import {
+  BatchCancellationController,
+  buildBatchReportCsv,
+  suggestContentColumn,
+  suggestFilenameColumn,
+  validateBatchRows,
+  type BatchValidationResult,
+  type BatchValidationRow,
+} from "./lib/batch";
+import {
+  clearDesignPreferences,
+  loadDesignPreferences,
+  saveDesignPreferences,
+  type DesignPreferences,
+  type PreferredExportFormat,
+} from "./lib/design-preferences";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
 import { getScannabilityWarnings } from "./lib/scannability";
@@ -45,7 +61,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.1";
+const APP_VERSION = "1.9.2";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
@@ -153,6 +169,9 @@ let logoAutoSuppressedFor = "";
 let currentPayload = "";
 let currentSvg = "";
 let batchData: CsvData | null = null;
+let batchValidation: BatchValidationResult | null = null;
+let batchGenerating = false;
+const batchCancellation = new BatchCancellationController();
 let pendingQrFrame = 0;
 let pendingScanTimer = 0;
 const latestScanRun = new LatestScanRun();
@@ -306,6 +325,12 @@ function renderApp(): void {
               <p id="logoUploadStatus" class="logo-upload-status" aria-live="polite"></p>
             </div>
             <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
+            <label class="field"><span>Preferred export</span><select id="preferredExportFormat"><option value="png" selected>PNG</option><option value="svg">SVG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
+            <div class="design-memory field-wide">
+              <label class="switch"><input id="rememberDesign" type="checkbox" /><span>Use this design next time</span></label>
+              <button id="resetDesign" class="secondary-action" type="button">Reset design</button>
+              <p id="designMemoryStatus" aria-live="polite"></p>
+            </div>
           </div>
         </details>
       </section>
@@ -370,6 +395,10 @@ function renderApp(): void {
       <details class="tool-surface batch-zone disclosure batch-disclosure" aria-label="Batch mode">
         <summary><span>Batch generate</span><span id="batchSummary">No file loaded</span></summary>
         <div class="disclosure-body">
+          <div class="batch-intro">
+            <p>Use CSV columns or a TXT list. Files are read and generated only in this browser.</p>
+            <button id="downloadSampleCsv" class="secondary-action" type="button">Download sample CSV</button>
+          </div>
           <div class="batch-grid">
             <label class="field field-wide"><span>CSV or TXT file</span><input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" /></label>
             <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
@@ -377,7 +406,19 @@ function renderApp(): void {
             <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
             <button id="exportZip" type="button" disabled>Export ZIP</button>
           </div>
+          <div id="batchProgress" class="batch-progress" hidden>
+            <progress id="batchProgressBar" value="0" max="1"></progress>
+            <div class="batch-progress-copy" aria-live="polite">
+              <span id="batchGeneratedCount">0 generated</span>
+              <span id="batchSkippedCount">0 skipped</span>
+            </div>
+            <button id="cancelBatch" class="secondary-action" type="button">Cancel</button>
+          </div>
           <div id="batchPreview" class="batch-preview"></div>
+          <details id="batchReportDetails" class="batch-report-details" hidden>
+            <summary>Full validation report</summary>
+            <textarea id="batchFullReport" readonly rows="8" aria-label="Full batch validation report"></textarea>
+          </details>
         </div>
       </details>
     </main>
@@ -616,6 +657,143 @@ function collectPayloadFields(): PayloadFields {
     fields[key] = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value;
   });
   return fields;
+}
+
+const DESIGN_CONTROL_IDS = new Set([
+  "colorMode",
+  "foreground",
+  "foregroundHex",
+  "background",
+  "backgroundHex",
+  "transparentBackground",
+  "margin",
+  "moduleSize",
+  "rounded",
+  "finderStyle",
+  "ecc",
+  "logoScale",
+  "preferredExportFormat",
+]);
+
+function selectedExportFormat(): PreferredExportFormat {
+  const value = document.querySelector<HTMLSelectElement>("#preferredExportFormat")?.value;
+  return value === "svg" || value === "webp" || value === "pdf" ? value : "png";
+}
+
+function updatePreferredExportFormat(): void {
+  const format = selectedExportFormat();
+  const primary = document.querySelector<HTMLButtonElement>(".primary-export");
+  const label = primary?.querySelector<HTMLSpanElement>("span");
+  if (primary) primary.dataset.export = format;
+  if (label) label.textContent = `Download ${format.toUpperCase()}`;
+  const batchFormat = document.querySelector<HTMLSelectElement>("#batchFormat");
+  if (batchFormat) batchFormat.value = format;
+}
+
+function readDesignPreferencesFromControls(): DesignPreferences {
+  const colorModeValue = document.querySelector<HTMLSelectElement>("#colorMode")?.value;
+  const colorMode = colorModeValue === "logo" || colorModeValue === "custom" ? colorModeValue : "default";
+  const finderValue = document.querySelector<HTMLSelectElement>("#finderStyle")?.value;
+  const finderStyle: FinderStyle = finderValue === "square" || finderValue === "circle" ? finderValue : "rounded";
+  const eccValue = document.querySelector<HTMLSelectElement>("#ecc")?.value;
+  const ecc: QrRenderOptions["ecc"] =
+    eccValue === "LOW" || eccValue === "MEDIUM" || eccValue === "QUARTILE" ? eccValue : "HIGH";
+
+  return {
+    colorMode,
+    foreground: readColorControl("foreground", DEFAULT_RENDER_OPTIONS.foreground),
+    background: readColorControl("background", DEFAULT_RENDER_OPTIONS.background),
+    transparentBackground: document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false,
+    margin: Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin),
+    moduleSize: Number(document.querySelector<HTMLInputElement>("#moduleSize")?.value ?? DEFAULT_RENDER_OPTIONS.moduleSize),
+    rounded: Number(document.querySelector<HTMLInputElement>("#rounded")?.value ?? DEFAULT_RENDER_OPTIONS.rounded),
+    finderStyle,
+    ecc,
+    logoScale: Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? DEFAULT_RENDER_OPTIONS.logoScale),
+    preferredExportFormat: selectedExportFormat(),
+  };
+}
+
+function applyDesignPreferences(preferences: DesignPreferences): void {
+  const colorMode = document.querySelector<HTMLSelectElement>("#colorMode");
+  const transparent = document.querySelector<HTMLInputElement>("#transparentBackground");
+  const margin = document.querySelector<HTMLInputElement>("#margin");
+  const moduleSize = document.querySelector<HTMLInputElement>("#moduleSize");
+  const rounded = document.querySelector<HTMLInputElement>("#rounded");
+  const finderStyle = document.querySelector<HTMLSelectElement>("#finderStyle");
+  const ecc = document.querySelector<HTMLSelectElement>("#ecc");
+  const logoScale = document.querySelector<HTMLInputElement>("#logoScale");
+  const preferredExport = document.querySelector<HTMLSelectElement>("#preferredExportFormat");
+
+  if (colorMode) colorMode.value = preferences.colorMode;
+  writeColorControl("foreground", preferences.foreground);
+  writeColorControl("background", preferences.background);
+  if (transparent) transparent.checked = preferences.transparentBackground;
+  if (margin) margin.value = String(preferences.margin);
+  if (moduleSize) moduleSize.value = String(preferences.moduleSize);
+  if (rounded) rounded.value = String(preferences.rounded);
+  if (finderStyle) finderStyle.value = preferences.finderStyle;
+  if (ecc) ecc.value = preferences.ecc;
+  if (logoScale) logoScale.value = String(preferences.logoScale);
+  if (preferredExport) preferredExport.value = preferences.preferredExportFormat;
+  updateCustomColorPanel();
+  updateSliderLabels();
+  updatePreferredExportFormat();
+}
+
+function persistDesignIfEnabled(): void {
+  const remember = document.querySelector<HTMLInputElement>("#rememberDesign");
+  if (!remember?.checked) return;
+  const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
+  const saved = saveDesignPreferences(window.localStorage, readDesignPreferencesFromControls());
+  if (status) status.textContent = saved ? "Design saved locally" : "Browser storage is unavailable";
+}
+
+function restoreDesignPreferences(): void {
+  const preferences = loadDesignPreferences(window.localStorage);
+  const remember = document.querySelector<HTMLInputElement>("#rememberDesign");
+  const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
+  if (!preferences) {
+    if (remember) remember.checked = false;
+    updatePreferredExportFormat();
+    return;
+  }
+  applyDesignPreferences(preferences);
+  if (remember) remember.checked = true;
+  if (status) status.textContent = "Saved design applied";
+}
+
+function handleDesignMemoryToggle(enabled: boolean): void {
+  const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
+  if (enabled) {
+    persistDesignIfEnabled();
+    return;
+  }
+  clearDesignPreferences(window.localStorage);
+  if (status) status.textContent = "Design memory off";
+}
+
+function resetDesignControls(): void {
+  clearDesignPreferences(window.localStorage);
+  const remember = document.querySelector<HTMLInputElement>("#rememberDesign");
+  if (remember) remember.checked = false;
+  applyDesignPreferences({
+    colorMode: "default",
+    foreground: DEFAULT_RENDER_OPTIONS.foreground,
+    background: DEFAULT_RENDER_OPTIONS.background,
+    transparentBackground: false,
+    margin: DEFAULT_RENDER_OPTIONS.margin,
+    moduleSize: DEFAULT_RENDER_OPTIONS.moduleSize,
+    rounded: DEFAULT_RENDER_OPTIONS.rounded,
+    finderStyle: DEFAULT_RENDER_OPTIONS.finderStyle,
+    ecc: DEFAULT_RENDER_OPTIONS.ecc,
+    logoScale: DEFAULT_RENDER_OPTIONS.logoScale,
+    preferredExportFormat: "png",
+  });
+  const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
+  if (status) status.textContent = "Design reset. Nothing is saved.";
+  refreshBatchValidation();
+  scheduleQrUpdate();
 }
 
 function getRenderOptions(): QrRenderOptions {
@@ -1036,62 +1214,178 @@ function toggleMobileExportMenu(): void {
   setMobileExportMenu(Boolean(menu?.hidden));
 }
 
+function canEncodeBatchPayload(payload: string): boolean {
+  const ecc = getRenderOptions().ecc;
+  try {
+    createQrCode(payload, ecc);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function batchSummaryText(result: BatchValidationResult): string {
+  const parts = [`${result.generatableCount} ready`];
+  if (result.counts.empty) parts.push(`${result.counts.empty} empty`);
+  if (result.counts.invalid) parts.push(`${result.counts.invalid} invalid`);
+  if (result.counts.duplicateFilename) parts.push(`${result.counts.duplicateFilename} renamed`);
+  if (result.counts.tooLong) parts.push(`${result.counts.tooLong} too long`);
+  return parts.join(", ");
+}
+
+function fullBatchReport(rows: BatchValidationRow[]): string {
+  const header = "row\tstatus\treason\trequested filename\toutput filename";
+  const lines = rows.map((row) =>
+    [row.row, row.status, row.reason, row.requestedFilename, row.outputFilename].join("\t"),
+  );
+  return [header, ...lines].join("\n");
+}
+
+function renderBatchValidation(result: BatchValidationResult): void {
+  const summary = document.querySelector<HTMLSpanElement>("#batchSummary");
+  const exportButton = document.querySelector<HTMLButtonElement>("#exportZip");
+  const preview = document.querySelector<HTMLDivElement>("#batchPreview");
+  const details = document.querySelector<HTMLDetailsElement>("#batchReportDetails");
+  const report = document.querySelector<HTMLTextAreaElement>("#batchFullReport");
+  if (!summary || !exportButton || !preview || !details || !report) return;
+
+  summary.textContent = batchSummaryText(result);
+  exportButton.disabled = batchGenerating || result.generatableCount === 0;
+  const examples = [
+    ...result.rows.filter((row) => row.status !== "ready"),
+    ...result.rows.filter((row) => row.status === "ready"),
+  ].slice(0, 5);
+  preview.innerHTML = examples.map((row) => {
+    const snippet = row.payload.length > 72 ? `${row.payload.slice(0, 69)}...` : row.payload || "(empty)";
+    return `<span class="batch-example" data-status="${row.status}"><strong>Row ${row.row}: ${escapeHtml(row.status.replace(/-/g, " "))}</strong><small>${escapeHtml(snippet)} · ${escapeHtml(row.reason)}</small></span>`;
+  }).join("");
+  details.hidden = result.rows.length === 0;
+  report.value = fullBatchReport(result.rows);
+}
+
+function refreshBatchValidation(): BatchValidationResult | null {
+  const contentColumn = document.querySelector<HTMLSelectElement>("#csvContentColumn")?.value ?? "";
+  const filenameColumn = document.querySelector<HTMLSelectElement>("#csvNameColumn")?.value ?? "";
+  if (!batchData || !contentColumn) {
+    batchValidation = null;
+    return null;
+  }
+  batchValidation = validateBatchRows(batchData, contentColumn, filenameColumn, canEncodeBatchPayload);
+  renderBatchValidation(batchValidation);
+  return batchValidation;
+}
+
 function populateBatchSelectors(data: CsvData): void {
   const content = document.querySelector<HTMLSelectElement>("#csvContentColumn");
   const names = document.querySelector<HTMLSelectElement>("#csvNameColumn");
   const summary = document.querySelector<HTMLSpanElement>("#batchSummary");
-  const exportButton = document.querySelector<HTMLButtonElement>("#exportZip");
-  const preview = document.querySelector<HTMLDivElement>("#batchPreview");
-  if (!content || !names || !summary || !exportButton || !preview) return;
+  if (!content || !names || !summary) return;
 
   const options = data.headers.map((header) => `<option value="${escapeHtml(header)}">${escapeHtml(header)}</option>`).join("");
   content.innerHTML = options;
   names.innerHTML = `<option value="">Sequential filenames</option>${options}`;
   content.disabled = data.headers.length === 0;
   names.disabled = data.headers.length === 0;
-  exportButton.disabled = data.rows.length === 0;
+  content.value = suggestContentColumn(data.headers);
+  names.value = suggestFilenameColumn(data.headers);
   summary.textContent = `${data.rows.length} rows loaded`;
-  preview.innerHTML = data.rows
-    .slice(0, 4)
-    .map((row, index) => `<span>${index + 1}. ${escapeHtml(String(Object.values(row)[0] ?? ""))}</span>`)
-    .join("");
+  refreshBatchValidation();
+}
+
+function downloadSampleCsv(): void {
+  const sample = "content,filename\r\nhttps://example.com,example\r\nHello from SayaQR,greeting\r\n";
+  downloadBlob(new Blob([sample], { type: "text/csv;charset=utf-8" }), "sayaqr-sample.csv");
+}
+
+function updateBatchProgress(processed: number, total: number, generated: number, skipped: number): void {
+  const progress = document.querySelector<HTMLProgressElement>("#batchProgressBar");
+  const generatedLabel = document.querySelector<HTMLSpanElement>("#batchGeneratedCount");
+  const skippedLabel = document.querySelector<HTMLSpanElement>("#batchSkippedCount");
+  if (progress) {
+    progress.max = Math.max(1, total);
+    progress.value = processed;
+  }
+  if (generatedLabel) generatedLabel.textContent = `${generated} generated`;
+  if (skippedLabel) skippedLabel.textContent = `${skipped} skipped`;
+}
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
 }
 
 async function exportBatchZip(): Promise<void> {
-  if (!batchData) return;
-  const contentColumn = document.querySelector<HTMLSelectElement>("#csvContentColumn")?.value;
-  const nameColumn = document.querySelector<HTMLSelectElement>("#csvNameColumn")?.value;
+  const validation = refreshBatchValidation();
   const format = document.querySelector<HTMLSelectElement>("#batchFormat")?.value ?? "svg";
   const button = document.querySelector<HTMLButtonElement>("#exportZip");
-  if (!contentColumn || !button) return;
+  const progressPanel = document.querySelector<HTMLDivElement>("#batchProgress");
+  const cancelButton = document.querySelector<HTMLButtonElement>("#cancelBatch");
+  if (!batchData || !validation || !button || batchGenerating || validation.generatableCount === 0) return;
 
+  batchGenerating = true;
+  batchCancellation.reset();
   button.disabled = true;
   button.textContent = "Generating...";
+  if (progressPanel) progressPanel.hidden = false;
+  if (cancelButton) cancelButton.hidden = false;
+
   const options = getRenderOptions();
   const files: ZipInputFile[] = [];
-  const extension = format === "jpeg" ? "jpg" : format;
+  const runtimeSkipped: BatchValidationRow[] = [];
+  let processed = 0;
+  let generated = 0;
+  let skipped = 0;
+  updateBatchProgress(0, validation.rows.length, 0, 0);
 
   try {
-    for (let index = 0; index < batchData.rows.length; index++) {
-      const row = batchData.rows[index];
-      const payload = row[contentColumn]?.trim() ?? "";
-      if (!payload) continue;
-      const baseName = safeFileName(nameColumn ? row[nameColumn] ?? "" : "", `qr-${index + 1}`);
-      const svg = buildSvgFromQr(createQrCode(payload, options.ecc), options);
-      if (format === "svg") {
-        files.push({ name: `${baseName}.svg`, data: svg });
-      } else if (format === "pdf") {
-        files.push({ name: `${baseName}.pdf`, data: await svgToPdfBlob(svg) });
+    for (const row of validation.rows) {
+      if (batchCancellation.isCancelled) break;
+      processed += 1;
+
+      if (!row.generatable) {
+        skipped += 1;
       } else {
-        const mime = format === "webp" ? "image/webp" : "image/png";
-        files.push({ name: `${baseName}.${extension}`, data: await svgToRasterBlob(svg, mime) });
+        try {
+          const svg = buildSvgFromQr(createQrCode(row.payload, options.ecc), options);
+          if (format === "svg") {
+            files.push({ name: `${row.outputFilename}.svg`, data: svg });
+          } else if (format === "pdf") {
+            files.push({ name: `${row.outputFilename}.pdf`, data: await svgToPdfBlob(svg) });
+          } else {
+            const mime = format === "webp" ? "image/webp" : "image/png";
+            files.push({ name: `${row.outputFilename}.${format}`, data: await svgToRasterBlob(svg, mime) });
+          }
+          generated += 1;
+        } catch {
+          skipped += 1;
+          runtimeSkipped.push({ ...row, status: "invalid", reason: "Generation failed", generatable: false });
+        }
       }
+
+      updateBatchProgress(processed, validation.rows.length, generated, skipped);
+      if (processed % 8 === 0) await yieldToBrowser();
     }
 
+    if (batchCancellation.isCancelled) {
+      const remaining = validation.rows.length - processed;
+      updateBatchProgress(processed, validation.rows.length, generated, skipped + remaining);
+      button.textContent = `Cancelled after ${generated}`;
+      return;
+    }
+
+    const reportRows = [...validation.rows, ...runtimeSkipped];
+    if (validation.skippedCount > 0 || runtimeSkipped.length > 0) {
+      files.push({ name: "batch-report.csv", data: buildBatchReportCsv(reportRows) });
+    }
     downloadBlob(await createZip(files), "sayaqr-batch.zip");
+    button.textContent = `Exported ${generated}`;
   } finally {
-    button.disabled = false;
-    button.textContent = "Export ZIP";
+    batchGenerating = false;
+    batchCancellation.reset();
+    if (cancelButton) cancelButton.hidden = true;
+    window.setTimeout(() => {
+      button.textContent = "Export ZIP";
+      button.disabled = (batchValidation?.generatableCount ?? 0) === 0;
+    }, 1200);
   }
 }
 
@@ -1099,6 +1393,21 @@ function wireEvents(): void {
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+
+    if (target.closest("#resetDesign")) {
+      resetDesignControls();
+      return;
+    }
+
+    if (target.closest("#downloadSampleCsv")) {
+      downloadSampleCsv();
+      return;
+    }
+
+    if (target.closest("#cancelBatch")) {
+      batchCancellation.cancel();
+      return;
+    }
 
     if (target.closest("#autoFixButton")) {
       applyAutomaticFix();
@@ -1145,20 +1454,36 @@ function wireEvents(): void {
         return;
       }
 
+      if (target.id === "rememberDesign") {
+        handleDesignMemoryToggle((target as HTMLInputElement).checked);
+        return;
+      }
+
+      if (target.id === "preferredExportFormat") {
+        updatePreferredExportFormat();
+        persistDesignIfEnabled();
+        return;
+      }
+
       if (target.id === "colorMode") {
         updateCustomColorPanel();
         scheduleQrUpdate();
+        persistDesignIfEnabled();
         return;
       }
 
       if (target.id === "foreground" || target.id === "background") {
         syncColorControl(target.id, "picker");
         scheduleQrUpdate();
+        persistDesignIfEnabled();
         return;
       }
 
       if (target.id === "foregroundHex" || target.id === "backgroundHex") {
-        if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) scheduleQrUpdate();
+        if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) {
+          scheduleQrUpdate();
+          persistDesignIfEnabled();
+        }
         return;
       }
 
@@ -1167,7 +1492,13 @@ function wireEvents(): void {
         syncLogoFromQuickContent(target.value);
       }
 
-      if (target.id !== "csvUpload" && target.id !== "logoUpload" && target.id !== "qrImport") scheduleQrUpdate();
+      if (DESIGN_CONTROL_IDS.has(target.id)) {
+        persistDesignIfEnabled();
+        if (target.id === "ecc") refreshBatchValidation();
+      }
+
+      const excluded = ["csvUpload", "logoUpload", "qrImport", "csvContentColumn", "csvNameColumn", "batchFormat"];
+      if (!excluded.includes(target.id)) scheduleQrUpdate();
     }
   });
 
@@ -1255,6 +1586,8 @@ function wireEvents(): void {
     batchData = isTextList ? parseTextList(text) : parseCsv(text);
     populateBatchSelectors(batchData);
   });
+  document.querySelector<HTMLSelectElement>("#csvContentColumn")?.addEventListener("change", refreshBatchValidation);
+  document.querySelector<HTMLSelectElement>("#csvNameColumn")?.addEventListener("change", refreshBatchValidation);
   document.querySelector<HTMLSelectElement>("#modeSelect")?.addEventListener("change", (event) => {
     categorySelection = (event.target as HTMLSelectElement).value as CategorySelection;
     const quickValue = document.querySelector<HTMLTextAreaElement>("#autoContent")?.value ?? "";
@@ -1303,6 +1636,7 @@ function registerServiceWorker(): void {
 renderApp();
 renderModeTabs();
 renderPayloadFields();
+restoreDesignPreferences();
 wireEvents();
 updateCustomColorPanel();
 updateNativeActionVisibility();
