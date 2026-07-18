@@ -19,13 +19,25 @@ describe("intent-first UI contract", () => {
   });
 
   it("uses PNG as the primary export and keeps alternate formats", () => {
+    const formatRow = mainSource.slice(
+      mainSource.indexOf('<div class="format-action-row"'),
+      mainSource.indexOf('id="nativeExportActions"'),
+    );
     expect(mainSource).toContain("<span>Download PNG</span>");
-    expect(mainSource).toContain("<summary>More formats</summary>");
+    expect(mainSource).toContain('class="format-action-row"');
+    expect(mainSource).toContain('class="alternate-format-actions"');
     expect(mainSource).toContain('data-export="svg"');
     expect(mainSource).toContain('data-export="webp"');
     expect(mainSource).toContain('data-export="pdf"');
-    expect(mainSource.indexOf('id="copyImage"')).toBeLessThan(mainSource.indexOf('<details class="more-formats">'));
-    expect(mainSource.indexOf('<details class="more-formats">')).toBeLessThan(mainSource.indexOf('id="shareImage"'));
+    expect(mainSource).not.toContain("<summary>More formats</summary>");
+    expect(mainSource.indexOf('id="scanTestDetails"')).toBeLessThan(mainSource.indexOf('id="formatGuidance"'));
+    expect(mainSource.indexOf('id="formatGuidance"')).toBeLessThan(mainSource.indexOf('class="format-action-row"'));
+    expect(formatRow.indexOf("<span>Download PNG</span>")).toBeLessThan(formatRow.indexOf('data-export="svg"'));
+    expect(mainSource.indexOf('data-export="pdf"')).toBeLessThan(mainSource.indexOf('id="nativeExportActions"'));
+    expect(mainSource.indexOf('id="copyImage"')).toBeLessThan(mainSource.indexOf('id="shareImage"'));
+    expect(mainSource).toContain('data-count="0" hidden');
+    expect(mainSource).toContain("updateFormatGuidance(format)");
+    expect(mainSource).not.toContain('id="preferredExportFormat"');
   });
 
   it("keeps the desktop columns compact and simplifies the empty preview", () => {
@@ -45,6 +57,21 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('id="logoPresetSelect"');
     expect(mainSource).toContain('id="logoUpload"');
     expect(mainSource).toContain("registerServiceWorker();");
+  });
+
+  it("presents custom logo uploads through a styled local control", () => {
+    expect(mainSource).toContain('class="logo-upload-control"');
+    expect(mainSource).toContain('id="logoUploadName"');
+    expect(mainSource).toContain("updateLogoUploadName(file.name);");
+    expect(mainSource).toContain("rasterizeImageFileToPng(file)");
+  });
+
+  it("offers click and drag-and-drop batch file selection", () => {
+    expect(mainSource).toContain('id="batchFileDropZone"');
+    expect(mainSource).toContain("Drop CSV or TXT here");
+    expect(mainSource).toContain("or click to choose a file");
+    expect(mainSource).toContain('batchFileDropZone?.addEventListener("drop"');
+    expect(mainSource).toContain("void loadBatchFile(file)");
   });
 
 });

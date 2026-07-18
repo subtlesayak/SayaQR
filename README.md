@@ -16,7 +16,7 @@ Batch generation stays collapsed until needed. It suggests likely content and fi
 - Offline PWA with service worker and web app manifest
 - Nayuki QR-Code-generator core vendored in `src/lib/nayuki-qrcodegen.ts`
 - QR modes: plain text, URL, Wi-Fi, email, SMS, phone, vCard contact, UPI payment, event/calendar, and geo location
-- One-click PNG download, plus SVG, WebP, and WYSIWYG PDF in More formats
+- Inline PNG, SVG, WebP, and WYSIWYG PDF downloads with contextual format guidance
 - Copy PNG directly to the image clipboard when supported
 - Native PNG file sharing with content-aware filenames when supported
 - Installed-PWA share target for links and text shared into SayaQR
@@ -28,8 +28,8 @@ Batch generation stays collapsed until needed. It suggests likely content and fi
 - Local QR image import from the file picker, drag and drop, or pasted screenshots
 - Local scan-confidence simulations at multiple sizes, blur, contrast, and rotation conditions
 - Conservative automatic fixes for QR designs rated risky or poor
-- Custom logo uploads, including SVG files, are rasterized locally to PNG before embedding
-- Batch CSV/TXT mode with CSV column mapping, comma/newline text lists, and ZIP export
+- Custom logo uploads use an accessible local picker; SVG and raster files are rasterized locally to PNG before embedding
+- Batch CSV/TXT mode with click or drag-and-drop import, column mapping, comma/newline text lists, and ZIP export
 - Privacy indicators for generated locally, no tracking, and no upload
 
 ## Local Guardian Privacy

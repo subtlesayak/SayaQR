@@ -4,7 +4,6 @@ import type { ErrorCorrectionLevel } from "./qr";
 export const DESIGN_PREFERENCE_KEY = "sayaqr:design:v1";
 
 export type DesignColorMode = "default" | "logo" | "custom";
-export type PreferredExportFormat = "png" | "svg" | "webp" | "pdf";
 
 export interface DesignPreferences {
   colorMode: DesignColorMode;
@@ -17,7 +16,6 @@ export interface DesignPreferences {
   finderStyle: FinderStyle;
   ecc: ErrorCorrectionLevel;
   logoScale: number;
-  preferredExportFormat: PreferredExportFormat;
 }
 
 export interface StorageLike {
@@ -30,7 +28,6 @@ const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 const COLOR_MODES: DesignColorMode[] = ["default", "logo", "custom"];
 const FINDER_STYLES: FinderStyle[] = ["square", "rounded", "circle"];
 const ECC_LEVELS: ErrorCorrectionLevel[] = ["LOW", "MEDIUM", "QUARTILE", "HIGH"];
-const EXPORT_FORMATS: PreferredExportFormat[] = ["png", "svg", "webp", "pdf"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -62,7 +59,6 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
     finderStyle,
     ecc,
     logoScale,
-    preferredExportFormat,
   } = value;
 
   if (
@@ -77,8 +73,7 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
     !isFiniteNumberInRange(rounded, 0, 1) ||
     !isOneOf(finderStyle, FINDER_STYLES) ||
     !isOneOf(ecc, ECC_LEVELS) ||
-    !isFiniteNumberInRange(logoScale, 0.05, 0.35) ||
-    !isOneOf(preferredExportFormat, EXPORT_FORMATS)
+    !isFiniteNumberInRange(logoScale, 0.05, 0.35)
   ) {
     return null;
   }
@@ -94,7 +89,6 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
     finderStyle,
     ecc,
     logoScale,
-    preferredExportFormat,
   };
 }
 
@@ -113,7 +107,6 @@ export function serializeDesignPreferences(value: DesignPreferences): string {
     finderStyle: validated.finderStyle,
     ecc: validated.ecc,
     logoScale: validated.logoScale,
-    preferredExportFormat: validated.preferredExportFormat,
   });
 }
 
