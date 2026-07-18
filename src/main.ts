@@ -23,7 +23,6 @@ import {
   loadDesignPreferences,
   saveDesignPreferences,
   type DesignPreferences,
-  type PreferredExportFormat,
 } from "./lib/design-preferences";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
@@ -61,8 +60,16 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.4";
+const APP_VERSION = "1.9.5";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
+type ExportFormat = "png" | "svg" | "webp" | "pdf";
+
+const EXPORT_FORMAT_GUIDANCE: Record<ExportFormat, string> = {
+  png: "Recommended for everyday use",
+  svg: "Best for design and scalable printing",
+  webp: "Compact web image",
+  pdf: "Print-ready; transparent backgrounds become white",
+};
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
 const QUICK_CONTENT_PLACEHOLDERS: Record<QrMode, string> = {
@@ -322,11 +329,17 @@ function renderApp(): void {
                 <label class="field logo-select-field" for="logoPresetSelect"><span>Logo preset</span><select id="logoPresetSelect" aria-label="Logo preset">${renderLogoPresetOptions()}</select></label>
               </div>
               <p class="logo-source-note">SVG marks stay local. Brand trademarks belong to their owners.</p>
-              <label class="logo-upload-field"><span>Upload custom</span><input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
+              <label class="logo-upload-field" for="logoUpload">
+                <span>Upload custom</span>
+                <span class="logo-upload-control">
+                  <svg class="upload-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 14v5h14v-5"/></svg>
+                  <span id="logoUploadName" class="logo-upload-name">Choose an image</span>
+                </span>
+                <input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
+              </label>
               <p id="logoUploadStatus" class="logo-upload-status" aria-live="polite"></p>
             </div>
             <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
-            <label class="field"><span>Preferred export</span><select id="preferredExportFormat"><option value="png" selected>PNG</option><option value="svg">SVG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
             <div class="design-memory field-wide">
               <label class="switch"><input id="rememberDesign" type="checkbox" /><span>Use this design next time</span></label>
               <button id="resetDesign" class="secondary-action" type="button">Reset design</button>
@@ -345,7 +358,14 @@ function renderApp(): void {
             <button id="downloadSampleCsv" class="secondary-action" type="button">Download sample CSV</button>
           </div>
           <div class="batch-grid">
-            <label class="field field-wide"><span>CSV or TXT file</span><input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" /></label>
+            <label id="batchFileDropZone" class="field field-wide batch-file-drop" for="csvUpload">
+              <span>CSV or TXT file</span>
+              <span class="batch-file-control">
+                <svg class="upload-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 14v5h14v-5"/></svg>
+                <span class="batch-file-copy"><strong id="batchFileName">Drop CSV or TXT here</strong><small>or click to choose a file</small></span>
+              </span>
+              <input id="csvUpload" type="file" accept=".csv,.txt,text/csv,text/plain" />
+            </label>
             <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
             <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
             <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
@@ -397,24 +417,18 @@ function renderApp(): void {
           </details>
           <div id="warnings" class="warnings" aria-live="polite"></div>
         </section>
+        <p id="formatGuidance" class="format-info" aria-live="polite" aria-atomic="true"><strong id="formatGuidanceName">PNG</strong><span id="formatGuidanceText">Recommended for everyday use</span></p>
         <div class="export-actions" aria-label="Export and share QR code">
-          <button class="primary-export" type="button" data-export="png" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download PNG</span></button>
-          <div class="secondary-export-actions">
+          <div class="format-action-row" role="group" aria-label="Download formats">
+            <button class="primary-export" type="button" data-export="png" aria-describedby="formatGuidance" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download PNG</span></button>
+            <div class="alternate-format-actions">
+              <button type="button" data-export="svg" aria-describedby="formatGuidance" disabled>SVG</button>
+              <button type="button" data-export="webp" aria-describedby="formatGuidance" disabled>WebP</button>
+              <button type="button" data-export="pdf" aria-describedby="formatGuidance" disabled>PDF</button>
+            </div>
+          </div>
+          <div id="nativeExportActions" class="secondary-export-actions" data-count="0" hidden>
             <button id="copyImage" class="secondary-export-action" type="button" hidden disabled>Copy</button>
-            <details class="more-formats">
-              <summary>More formats</summary>
-              <div class="more-format-list">
-                <button type="button" data-export="svg" disabled>SVG</button>
-                <button type="button" data-export="webp" disabled>WebP</button>
-                <button type="button" data-export="pdf" disabled>PDF</button>
-              </div>
-              <ul class="format-guidance">
-                <li><strong>PNG</strong><span>Recommended for everyday use</span></li>
-                <li><strong>SVG</strong><span>Best for design and scalable printing</span></li>
-                <li><strong>PDF</strong><span>Print-ready; transparent backgrounds become white</span></li>
-                <li><strong>WebP</strong><span>Compact web image</span></li>
-              </ul>
-            </details>
             <button id="shareImage" class="secondary-export-action" type="button" hidden disabled>Share</button>
           </div>
         </div>
@@ -621,6 +635,13 @@ function updateLogoPresetState(): void {
   if (preview) preview.innerHTML = renderSelectedLogoPreview();
 }
 
+function updateLogoUploadName(fileName = ""): void {
+  const name = document.querySelector<HTMLSpanElement>("#logoUploadName");
+  if (!name) return;
+  name.textContent = fileName || "Choose an image";
+  name.title = fileName;
+}
+
 function applyLogoPreset(presetId: LogoPresetId, auto: boolean): void {
   const preset = getLogoPreset(presetId);
   if (!preset) return;
@@ -630,6 +651,7 @@ function applyLogoPreset(presetId: LogoPresetId, auto: boolean): void {
   if (!auto) logoAutoSuppressedFor = "";
   const upload = document.querySelector<HTMLInputElement>("#logoUpload");
   if (upload) upload.value = "";
+  updateLogoUploadName();
   updateLogoPresetState();
 }
 
@@ -640,6 +662,7 @@ function clearCenterLogo(suppressAuto = false): void {
   logoAutoSuppressedFor = suppressAuto ? (document.querySelector<HTMLTextAreaElement>("#autoContent")?.value.trim() ?? "") : "";
   const upload = document.querySelector<HTMLInputElement>("#logoUpload");
   if (upload) upload.value = "";
+  updateLogoUploadName();
   updateLogoPresetState();
   scheduleQrUpdate();
 }
@@ -681,23 +704,7 @@ const DESIGN_CONTROL_IDS = new Set([
   "finderStyle",
   "ecc",
   "logoScale",
-  "preferredExportFormat",
 ]);
-
-function selectedExportFormat(): PreferredExportFormat {
-  const value = document.querySelector<HTMLSelectElement>("#preferredExportFormat")?.value;
-  return value === "svg" || value === "webp" || value === "pdf" ? value : "png";
-}
-
-function updatePreferredExportFormat(): void {
-  const format = selectedExportFormat();
-  const primary = document.querySelector<HTMLButtonElement>(".primary-export");
-  const label = primary?.querySelector<HTMLSpanElement>("span");
-  if (primary) primary.dataset.export = format;
-  if (label) label.textContent = `Download ${format.toUpperCase()}`;
-  const batchFormat = document.querySelector<HTMLSelectElement>("#batchFormat");
-  if (batchFormat) batchFormat.value = format;
-}
 
 function readDesignPreferencesFromControls(): DesignPreferences {
   const colorModeValue = document.querySelector<HTMLSelectElement>("#colorMode")?.value;
@@ -720,7 +727,6 @@ function readDesignPreferencesFromControls(): DesignPreferences {
     finderStyle,
     ecc,
     logoScale: Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? DEFAULT_RENDER_OPTIONS.logoScale),
-    preferredExportFormat: selectedExportFormat(),
   };
 }
 
@@ -733,7 +739,6 @@ function applyDesignPreferences(preferences: DesignPreferences): void {
   const finderStyle = document.querySelector<HTMLSelectElement>("#finderStyle");
   const ecc = document.querySelector<HTMLSelectElement>("#ecc");
   const logoScale = document.querySelector<HTMLInputElement>("#logoScale");
-  const preferredExport = document.querySelector<HTMLSelectElement>("#preferredExportFormat");
 
   if (colorMode) colorMode.value = preferences.colorMode;
   writeColorControl("foreground", preferences.foreground);
@@ -745,10 +750,8 @@ function applyDesignPreferences(preferences: DesignPreferences): void {
   if (finderStyle) finderStyle.value = preferences.finderStyle;
   if (ecc) ecc.value = preferences.ecc;
   if (logoScale) logoScale.value = String(preferences.logoScale);
-  if (preferredExport) preferredExport.value = preferences.preferredExportFormat;
   updateCustomColorPanel();
   updateSliderLabels();
-  updatePreferredExportFormat();
 }
 
 function browserStorage(): Storage | null {
@@ -775,7 +778,6 @@ function restoreDesignPreferences(): void {
   const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
   if (!preferences) {
     if (remember) remember.checked = false;
-    updatePreferredExportFormat();
     return;
   }
   applyDesignPreferences(preferences);
@@ -810,7 +812,6 @@ function resetDesignControls(): void {
     finderStyle: DEFAULT_RENDER_OPTIONS.finderStyle,
     ecc: DEFAULT_RENDER_OPTIONS.ecc,
     logoScale: DEFAULT_RENDER_OPTIONS.logoScale,
-    preferredExportFormat: "png",
   });
   const status = document.querySelector<HTMLParagraphElement>("#designMemoryStatus");
   if (status) status.textContent = "Design reset. Nothing is saved.";
@@ -1042,6 +1043,17 @@ async function importQrImage(file: File): Promise<void> {
   }
 }
 
+function isExportFormat(value: string | undefined): value is ExportFormat {
+  return value !== undefined && value in EXPORT_FORMAT_GUIDANCE;
+}
+
+function updateFormatGuidance(format: ExportFormat): void {
+  const name = document.querySelector<HTMLElement>("#formatGuidanceName");
+  const text = document.querySelector<HTMLElement>("#formatGuidanceText");
+  if (name) name.textContent = format.toUpperCase();
+  if (text) text.textContent = EXPORT_FORMAT_GUIDANCE[format];
+}
+
 function updateExportAvailability(available: boolean): void {
   document.querySelectorAll<HTMLButtonElement>("[data-export]").forEach((button) => {
     button.disabled = !available;
@@ -1156,6 +1168,16 @@ async function exportCurrent(format: string): Promise<void> {
 }
 
 
+function updateNativeActionLayout(): void {
+  const actions = document.querySelector<HTMLDivElement>("#nativeExportActions");
+  const copyButton = document.querySelector<HTMLButtonElement>("#copyImage");
+  const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
+  if (!actions) return;
+  const visibleCount = Number(Boolean(copyButton && !copyButton.hidden)) + Number(Boolean(shareButton && !shareButton.hidden));
+  actions.dataset.count = String(visibleCount);
+  actions.hidden = visibleCount === 0;
+}
+
 function updateNativeActionVisibility(): void {
   const copyButton = document.querySelector<HTMLButtonElement>("#copyImage");
   const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
@@ -1168,6 +1190,7 @@ function updateNativeActionVisibility(): void {
       shareButton.hidden = !supportsPngFileShare(probe);
     }
   }
+  updateNativeActionLayout();
 }
 
 async function copyCurrentImage(): Promise<void> {
@@ -1196,6 +1219,7 @@ async function shareCurrentImage(): Promise<void> {
     if (!supportsPngFileShare(file)) {
       const button = document.querySelector<HTMLButtonElement>("#shareImage");
       if (button) button.hidden = true;
+      updateNativeActionLayout();
       return;
     }
     if (status) status.textContent = "Opening share sheet...";
@@ -1298,6 +1322,30 @@ function refreshBatchValidation(): BatchValidationResult | null {
   batchValidation = validateBatchRows(batchData, contentColumn, filenameColumn, canEncodeBatchPayload);
   renderBatchValidation(batchValidation);
   return batchValidation;
+}
+
+async function loadBatchFile(file: File): Promise<void> {
+  const fileName = document.querySelector<HTMLElement>("#batchFileName");
+  const summary = document.querySelector<HTMLSpanElement>("#batchSummary");
+  const lowerName = file.name.toLowerCase();
+  const isCsv = lowerName.endsWith(".csv") || file.type === "text/csv";
+  const isTextList = lowerName.endsWith(".txt") || (!isCsv && file.type === "text/plain");
+  if (!isTextList && !isCsv) {
+    if (summary) summary.textContent = "Choose CSV or TXT";
+    return;
+  }
+
+  if (fileName) {
+    fileName.textContent = file.name;
+    fileName.title = file.name;
+  }
+  try {
+    const text = await file.text();
+    batchData = isTextList ? parseTextList(text) : parseCsv(text);
+    populateBatchSelectors(batchData);
+  } catch {
+    if (summary) summary.textContent = "File could not be read";
+  }
 }
 
 function populateBatchSelectors(data: CsvData): void {
@@ -1472,6 +1520,27 @@ function wireEvents(): void {
 
 
   });
+  const formatActionRow = document.querySelector<HTMLDivElement>(".format-action-row");
+  const showFormatGuidance = (target: EventTarget | null): void => {
+    if (!(target instanceof Element)) return;
+    const format = target.closest<HTMLButtonElement>("[data-export]")?.dataset.export;
+    if (isExportFormat(format)) updateFormatGuidance(format);
+  };
+  formatActionRow?.addEventListener("pointerover", (event) => {
+    showFormatGuidance(event.target);
+  });
+  formatActionRow?.addEventListener("pointerleave", () => {
+    if (!formatActionRow.contains(document.activeElement)) updateFormatGuidance("png");
+  });
+  formatActionRow?.addEventListener("focusin", (event) => {
+    showFormatGuidance(event.target);
+  });
+  formatActionRow?.addEventListener("focusout", () => {
+    queueMicrotask(() => {
+      if (!formatActionRow.contains(document.activeElement)) updateFormatGuidance("png");
+    });
+  });
+
 
   document.addEventListener("input", (event) => {
     const target = event.target;
@@ -1483,12 +1552,6 @@ function wireEvents(): void {
 
       if (target.id === "rememberDesign") {
         handleDesignMemoryToggle((target as HTMLInputElement).checked);
-        return;
-      }
-
-      if (target.id === "preferredExportFormat") {
-        updatePreferredExportFormat();
-        persistDesignIfEnabled();
         return;
       }
 
@@ -1548,10 +1611,12 @@ function wireEvents(): void {
     const status = document.querySelector<HTMLParagraphElement>("#logoUploadStatus");
     if (!file) {
       clearCenterLogo(true);
+      updateLogoUploadName();
       if (status) status.textContent = "";
       return;
     }
 
+    updateLogoUploadName(file.name);
     if (status) status.textContent = "Processing logo locally...";
     try {
       logoDataUrl = await rasterizeImageFileToPng(file);
@@ -1563,6 +1628,7 @@ function wireEvents(): void {
       scheduleQrUpdate();
     } catch (error) {
       input.value = "";
+      updateLogoUploadName();
       if (status) status.textContent = error instanceof Error ? error.message : "This logo could not be decoded.";
     }
   });
@@ -1605,13 +1671,30 @@ function wireEvents(): void {
     void importQrImage(file);
   });
 
-  document.querySelector<HTMLInputElement>("#csvUpload")?.addEventListener("change", async (event) => {
+  document.querySelector<HTMLInputElement>("#csvUpload")?.addEventListener("change", (event) => {
     const file = (event.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const isTextList = file.name.toLowerCase().endsWith(".txt") || file.type === "text/plain";
-    batchData = isTextList ? parseTextList(text) : parseCsv(text);
-    populateBatchSelectors(batchData);
+    if (file) void loadBatchFile(file);
+  });
+  const batchFileDropZone = document.querySelector<HTMLElement>("#batchFileDropZone");
+  batchFileDropZone?.addEventListener("dragenter", (event) => {
+    event.preventDefault();
+    batchFileDropZone.classList.add("is-dragging");
+  });
+  batchFileDropZone?.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    batchFileDropZone.classList.add("is-dragging");
+  });
+  batchFileDropZone?.addEventListener("dragleave", (event) => {
+    if (!(event.relatedTarget instanceof Node) || !batchFileDropZone.contains(event.relatedTarget)) {
+      batchFileDropZone.classList.remove("is-dragging");
+    }
+  });
+  batchFileDropZone?.addEventListener("drop", (event) => {
+    event.preventDefault();
+    batchFileDropZone.classList.remove("is-dragging");
+    const file = event.dataTransfer?.files[0];
+    if (file) void loadBatchFile(file);
   });
   document.querySelector<HTMLSelectElement>("#csvContentColumn")?.addEventListener("change", refreshBatchValidation);
   document.querySelector<HTMLSelectElement>("#csvNameColumn")?.addEventListener("change", refreshBatchValidation);

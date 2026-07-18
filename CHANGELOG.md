@@ -2,6 +2,24 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.5] - 2026-07-16
+
+### Fixed
+
+- Standardized visible mobile controls at a minimum 44-pixel touch height.
+- Replaced the native custom-logo file field with an accessible local picker and filename feedback.
+- Calmed the empty preview while retaining the transparency checkerboard for generated QR codes.
+- Added click and drag-and-drop selection to the local CSV/TXT batch importer.
+- Restored a visible desktop preview scrollbar so scan checks and export controls remain discoverable.
+
+### Changed
+
+- Refined nested radii and replaced heavy panel borders with quieter layered shadows.
+- Added animated disclosure chevrons.
+- Placed PNG beside inline SVG, WebP, and PDF actions, with contextual format guidance below scan-test details.
+- Kept Copy and Share together in a responsive two-column action row.
+- Removed the conflicting preferred-export setting; PNG remains the primary download and batch format stays independent.
+
 ## [1.9.4] - 2026-07-13
 
 ### Fixed

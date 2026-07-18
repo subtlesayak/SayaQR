@@ -20,7 +20,6 @@ const validPreferences: DesignPreferences = {
   finderStyle: "rounded",
   ecc: "HIGH",
   logoScale: 0.18,
-  preferredExportFormat: "png",
 };
 
 function memoryStorage(value: string | null): StorageLike {
@@ -69,6 +68,6 @@ describe("design preferences", () => {
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("password");
     expect(serialized).not.toContain("batchRows");
-    expect(Object.keys(JSON.parse(serialized))).toHaveLength(11);
+    expect(Object.keys(JSON.parse(serialized))).toHaveLength(10);
   });
 });
