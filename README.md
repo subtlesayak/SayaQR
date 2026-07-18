@@ -1,104 +1,158 @@
-# SayaQR
+<div align="center">
+  <img src="./public/icon.svg" alt="SayaQR logo" width="88" height="88">
+  <h1>SayaQR</h1>
+  <p><strong>Private QR codes, made entirely in your browser.</strong></p>
+  <p>Generated locally. No tracking. No upload.</p>
 
-SayaQR is a modern, privacy-first QR code generator that runs fully in the browser. QR content is generated locally with Nayuki's MIT-licensed QR encoder; there is no tracking, no server upload, and no content API call.
+  <p>
+    <a href="https://subtlesayak.github.io/SayaQR/"><strong>Open SayaQR</strong></a>
+    ·
+    <a href="https://github.com/subtlesayak/SayaQR/releases/latest">Latest release</a>
+    ·
+    <a href="./CHANGELOG.md">Changelog</a>
+  </p>
 
-Its default flow is intentionally simple: paste content, understand the detected intent, preview the QR, and download a PNG. Structured fields, customization, technical payloads, alternate formats, and batch generation remain available through progressive disclosure.
+  <p>
+    <a href="https://github.com/subtlesayak/SayaQR/actions/workflows/ci.yml"><img src="https://github.com/subtlesayak/SayaQR/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+    <a href="https://github.com/subtlesayak/SayaQR/actions/workflows/deploy-pages.yml"><img src="https://github.com/subtlesayak/SayaQR/actions/workflows/deploy-pages.yml/badge.svg" alt="GitHub Pages status"></a>
+    <a href="https://github.com/subtlesayak/SayaQR/releases/latest"><img src="https://img.shields.io/github/v/release/subtlesayak/SayaQR?display_name=tag&amp;sort=semver&amp;color=0f766e" alt="Latest release"></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-172033?style=flat" alt="MIT License"></a>
+  </p>
+</div>
 
-## Phase 4: Design memory and batch polish
+<p align="center">
+  <img src="./docs/sayaqr-interface.png" alt="SayaQR interface showing a locally generated URL QR code and export controls" width="1100">
+</p>
 
-Design memory is opt-in. Enable **Use this design next time** to keep only visual settings in localStorage under the versioned key `sayaqr:design:v1`. QR content, payload fields, Wi-Fi passwords, contact details, uploaded logos, imported images, and batch rows are never stored.
+<p align="center"><sub>SayaQR v1.9.5 · content → inspect → download</sub></p>
 
-Batch generation stays collapsed until needed. It suggests likely content and filename columns, validates rows before generation, resolves duplicate filenames deterministically, yields during large jobs, supports cancellation, and adds `batch-report.csv` to the ZIP when rows are skipped. A sample CSV is generated locally from the batch panel.
+## Why SayaQR
 
-## Features
+| | |
+| --- | --- |
+| **Private by default** | QR content, passwords, contacts, payments, images, and batch files stay in your browser. |
+| **Works offline** | Installable PWA with a locally cached app shell and no CDN dependency. |
+| **Easy first, powerful later** | Paste content and download immediately; structured fields and design controls remain collapsed until needed. |
+| **Open and inspectable** | Strict TypeScript, an MIT project license, and Nayuki's MIT-licensed QR encoder. |
 
-- Vite + TypeScript single-page app
-- Offline PWA with service worker and web app manifest
-- Nayuki QR-Code-generator core vendored in `src/lib/nayuki-qrcodegen.ts`
-- QR modes: plain text, URL, Wi-Fi, email, SMS, phone, vCard contact, UPI payment, event/calendar, and geo location
-- Inline PNG, SVG, WebP, and WYSIWYG PDF downloads with contextual format guidance
-- Copy PNG directly to the image clipboard when supported
-- Native PNG file sharing with content-aware filenames when supported
-- Installed-PWA share target for links and text shared into SayaQR
-- Human-readable intent previews with local warnings for risky links, payments, events, Wi-Fi, and coordinates
-- Progressive disclosure for structured fields, customization, technical payloads, and batch generation
-- Content-aware export filenames based on the QR intent
-- Design controls: foreground/background colors, transparent background, quiet zone, module size, rounded modules, finder pattern style, center logo upload, logo preset dropdown, and logo size control
-- Scannability checks for low contrast, small quiet zones, oversized logos, and long payloads
-- Local QR image import from the file picker, drag and drop, or pasted screenshots
-- Local scan-confidence simulations at multiple sizes, blur, contrast, and rotation conditions
-- Conservative automatic fixes for QR designs rated risky or poor
-- Custom logo uploads use an accessible local picker; SVG and raster files are rasterized locally to PNG before embedding
-- Batch CSV/TXT mode with click or drag-and-drop import, column mapping, comma/newline text lists, and ZIP export
-- Privacy indicators for generated locally, no tracking, and no upload
+## From content to QR
 
-## Local Guardian Privacy
+1. **Paste or type** content. SayaQR detects the QR type automatically.
+2. **Inspect and style** the live QR while local scan checks flag risky choices.
+3. **Download, copy, or share** without sending the payload anywhere.
 
-Imported QR images stay on the device and are decoded locally with the bundled jsQR library. Pasted screenshots, dropped images, custom logos, generated scan variants, and decoded payloads are never uploaded.
+## What you can create
 
-Scan confidence is an advisory local test, not a guarantee that every camera or scanning app will read the QR. The six simulations help identify common size, blur, contrast, and rotation risks before printing or sharing. Simulation canvases are released after each check and are not stored.
+| QR type | Useful for | QR type | Useful for |
+| --- | --- | --- | --- |
+| **Plain text** | Notes, labels, serials | **URL** | Websites and deep links |
+| **Wi-Fi** | Network credentials | **Email** | Address, subject, and body |
+| **SMS** | Number and prepared message | **Phone** | Tap-to-call links |
+| **vCard** | Shareable contact details | **UPI** | Indian payment requests |
+| **Event** | Calendar invitations | **Geo** | Coordinates and map labels |
 
-Mobile QR photo import uses bounded local crop passes after the full-image attempt, improving detection when a QR occupies only part of a phone photo while keeping every canvas at or below 1600px.
+## Built for real use
 
-## WYSIWYG Export And Sharing
+| Area | Included |
+| --- | --- |
+| **Intent-aware input** | Automatic type detection, structured field editing, human-readable previews, and content-aware filenames. |
+| **Design controls** | Foreground and background colors, transparency, quiet zone, module size, rounded modules, finder style, and center logos. |
+| **Scan safety** | Contrast, quiet-zone, logo-size, and payload-density warnings plus local blur, size, contrast, and rotation simulations. |
+| **Flexible output** | Inline PNG, SVG, WebP, and WYSIWYG PDF downloads; image copy and native sharing when supported. |
+| **Local QR import** | Decode QR screenshots through file selection, drag and drop, or paste without uploading the image. |
+| **Batch generation** | CSV/TXT drag and drop, column suggestions, validation, deterministic filenames, cancellation, ZIP export, and error reports. |
+| **Opt-in design memory** | Save visual preferences under `sayaqr:design:v1`; content and uploaded files are never persisted. |
+| **Offline PWA** | Installable app, native share target, relative paths for GitHub Pages, and locally bundled dependencies. |
 
-SVG, PNG, WebP, PDF, clipboard copy, and native sharing all use the current styled SVG as their canonical source. PDF export rasterizes that SVG to a lossless PNG of at least 1600 x 1600 pixels, embeds it without JPEG recompression, and preserves colors, background, rounded modules, finder style, logos, logo backing, quiet zone, and proportions. Transparent QR backgrounds are rendered on white for PDF because ordinary printed paper has a background.
+## Privacy by design
 
-Copy image appears only when PNG clipboard writing is supported. Share appears only when the browser supports sharing a PNG file. Share cancellation is silent, unsupported features remain hidden, and neither action silently falls back to downloading. The generic share message never includes the encoded payload.
+SayaQR has no backend and makes no content API calls. QR payloads, Wi-Fi passwords, UPI details, contacts, locations, events, imported images, custom logos, and batch rows remain on the device.
 
-When installed as a PWA, SayaQR can receive shared URLs or text through its relative GET share target. Incoming share parameters are auto-detected locally and immediately removed from the address bar with `history.replaceState`. Browser feature detection provides graceful fallback where clipboard, file sharing, or PWA share targets are unavailable.
+| Data | Behavior |
+| --- | --- |
+| QR content and structured fields | Used in memory for generation; never transmitted or persisted. |
+| Imported QR images and custom logos | Decoded or rasterized locally; never uploaded. |
+| Design preferences | Stored in localStorage only after **Use this design next time** is enabled. |
+| Native share text | Uses a generic description and never includes the encoded payload. |
 
-## Local Development
+There is no analytics, advertising, account system, cloud storage, URL shortener, or redirect service.
 
-Install dependencies:
+## Exports that match the preview
 
-```bash
+| Format | Best for |
+| --- | --- |
+| **PNG** | Everyday sharing and documents |
+| **SVG** | Design tools and scalable printing |
+| **WebP** | Compact web images |
+| **PDF** | Print-ready output |
+
+SVG, PNG, WebP, PDF, clipboard copy, and native sharing all use the styled preview SVG as their canonical source. Colors, background, rounded modules, finder style, center logo, logo backing, quiet zone, and proportions stay consistent across formats.
+
+PDF export embeds a lossless PNG at a minimum of 1600 × 1600 pixels. Transparent backgrounds become white for PDF because printed paper has a background.
+
+Copy and Share appear only when the browser supports those capabilities. Installed PWAs can receive shared URLs or text; incoming share parameters are auto-detected locally and removed from browser history immediately.
+
+> [!NOTE]
+> Scan confidence is an advisory local simulation, not a guarantee. Always test styled or logo-heavy QR codes with the cameras and scanning apps your audience will use.
+
+## Run locally
+
+**Requirements:** Node.js 22+ and [pnpm](https://pnpm.io/).
+
+~~~bash
+# Install dependencies
 pnpm install
-```
 
-Run the dev server:
-
-```bash
+# Start the development server
 pnpm dev
-```
 
-Run tests:
-
-```bash
+# Run the test suite
 pnpm test
-```
 
-Build production assets:
-
-```bash
+# Build production assets
 pnpm build
-```
 
-Preview the production build:
-
-```bash
+# Preview the production build
 pnpm preview
-```
+~~~
+
+The development server is available at `http://127.0.0.1:5173/` by default.
 
 ## Deployment
 
-The app is a static Vite build. Deploy the generated `dist/` directory to any static host, including GitHub Pages, Netlify, Cloudflare Pages, or Vercel static hosting.
+- **Live app:** [subtlesayak.github.io/SayaQR](https://subtlesayak.github.io/SayaQR/)
+- **Latest release:** [github.com/subtlesayak/SayaQR/releases/latest](https://github.com/subtlesayak/SayaQR/releases/latest)
+- **Deployment workflow:** [Deploy to GitHub Pages](https://github.com/subtlesayak/SayaQR/actions/workflows/deploy-pages.yml)
 
-The Vite config uses `base: "./"` so the app can be served from a subpath such as GitHub Pages. The service worker caches the app shell and same-origin assets after the first load.
+Pull requests run the test suite and production build. Every push to `main` rebuilds and deploys `dist/` to GitHub Pages, then creates the versioned GitHub release when its tag does not already exist.
 
-## License Attribution
+SayaQR uses relative Vite paths, so the same production build can be hosted from a subpath on GitHub Pages or another static host. No server runtime is required.
 
-This project uses the QR Code generator library by Project Nayuki:
+## Contributing
 
-- Source: https://github.com/nayuki/QR-Code-generator
-- Homepage: https://www.nayuki.io/page/qr-code-generator-library
-- License: MIT License
-- Vendored file: `src/lib/nayuki-qrcodegen.ts`
+Issues and pull requests are welcome. Please preserve the core product contract:
 
-The Nayuki source file includes its original MIT license header. Keep that copyright and permission notice in all copies or substantial portions of the software.
+- browser-only and local-first
+- no tracking, accounts, cloud storage, or content APIs
+- advanced controls hidden until requested
+- keyboard-accessible controls and mobile layouts without horizontal overflow
+- tests and a production build before merge
 
-Embedded logo presets use local SVG path data from Material Design Icons, Simple Icons, and Wikimedia Commons where available. These marks are bundled for offline use and are not requested from a server at runtime. Brand names and logos may still be trademarks of their respective owners.
+## Credits and license
 
-## QR Decoder Attribution
+SayaQR is released under the [MIT License](./LICENSE).
 
-Local QR image decoding uses [jsQR](https://github.com/cozmo/jsQR), bundled with the application for offline use under the Apache License 2.0. No decoder code, images, or payloads are loaded from or sent to a remote service.
+- **QR encoding:** [Project Nayuki's QR Code generator](https://www.nayuki.io/page/qr-code-generator-library), vendored in `src/lib/nayuki-qrcodegen.ts` under the MIT License. The original copyright and permission notice are preserved.
+- **QR decoding:** [jsQR](https://github.com/cozmo/jsQR), bundled locally under the Apache License 2.0.
+- **Logo presets:** Local SVG path data from Material Design Icons, Simple Icons, and Wikimedia Commons where available. Brand names and marks remain the property of their respective owners.
+- **Design inspiration:** [QRBTF](https://github.com/CPunisher/react-qrbtf) and [QRFrame](https://github.com/zhengkyl/qrframe) inspired the exploration of approachable QR styling. Their source code, UI, and assets are not copied into SayaQR.
+
+The Nayuki encoder, jsQR decoder, logos, and all application dependencies are bundled locally. Generating or decoding a QR never requires a third-party request.
+
+---
+
+<p align="center">
+  Built by <a href="https://subtlesayak.github.io/"><strong>Subtle Sayak</strong></a>
+  ·
+  <a href="https://github.com/subtlesayak/SayaQR">GitHub</a>
+</p>
