@@ -1,3 +1,4 @@
+import { createQrCode, type ErrorCorrectionLevel } from "./qr";
 import { contrastRatio } from "./scannability";
 import { decodeQrImageData, type DecodedQr } from "./qr-decoder";
 
@@ -24,7 +25,7 @@ export interface ScanConfidenceResult {
 
 export interface AutoFixValues {
   margin: number;
-  ecc: string;
+  ecc: ErrorCorrectionLevel;
   logoScale: number;
   rounded: number;
   transparentBackground: boolean;
@@ -75,7 +76,7 @@ export function calculateAutoFixValues(values: AutoFixValues): AutoFixValues {
   const lowContrast = lowModuleContrast || lowFinderContrast;
   return {
     margin: Math.max(4, values.margin),
-    ecc: "HIGH",
+    ecc: values.ecc,
     logoScale: Math.min(0.2, values.logoScale),
     rounded: Math.min(0.15, values.rounded),
     transparentBackground: false,
@@ -83,6 +84,28 @@ export function calculateAutoFixValues(values: AutoFixValues): AutoFixValues {
     finderColor: lowFinderContrast ? "#0F172A" : values.finderColor,
     background: lowContrast ? "#FFFFFF" : values.background,
   };
+}
+
+const ECC_RELIABILITY_ORDER: ErrorCorrectionLevel[] = ["HIGH", "QUARTILE", "MEDIUM", "LOW"];
+
+export function chooseAutoFixErrorCorrection(
+  payload: string,
+  currentEcc: ErrorCorrectionLevel,
+  wasManuallyChanged: boolean,
+): ErrorCorrectionLevel {
+  if (wasManuallyChanged || !payload.trim()) return currentEcc;
+
+  const candidates = ECC_RELIABILITY_ORDER.flatMap((ecc) => {
+    try {
+      return [{ ecc, size: createQrCode(payload, ecc).size }];
+    } catch {
+      return [];
+    }
+  });
+  if (candidates.length === 0) return currentEcc;
+
+  const smallestSize = Math.min(...candidates.map((candidate) => candidate.size));
+  return candidates.find((candidate) => candidate.size <= smallestSize + 4)?.ecc ?? candidates[candidates.length - 1].ecc;
 }
 
 export class LatestScanRun {

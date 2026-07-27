@@ -18,7 +18,11 @@ const validPreferences: DesignPreferences = {
   margin: 4,
   moduleSize: 12,
   rounded: 0.2,
+  moduleStyle: "dots",
   finderStyle: "rounded",
+  logoBackground: "none",
+  logoStroke: true,
+  logoStrokeColor: "#556677",
   ecc: "HIGH",
   logoScale: 0.18,
 };
@@ -44,6 +48,20 @@ describe("design preferences", () => {
   it("migrates saved designs that predate finder colors", () => {
     const { finderColor: _finderColor, ...legacyPreferences } = validPreferences;
     expect(validateDesignPreferences(legacyPreferences)?.finderColor).toBe("#112233");
+  });
+
+  it("migrates saved designs that predate module styles", () => {
+    const { moduleStyle: _moduleStyle, ...legacyPreferences } = validPreferences;
+    expect(validateDesignPreferences(legacyPreferences)?.moduleStyle).toBe("classic");
+  });
+
+  it("migrates saved designs that predate logo render options", () => {
+    const { logoBackground: _logoBackground, logoStroke: _logoStroke, logoStrokeColor: _logoStrokeColor, ...legacyPreferences } = validPreferences;
+    expect(validateDesignPreferences(legacyPreferences)).toMatchObject({
+      logoBackground: "padded",
+      logoStroke: false,
+      logoStrokeColor: "#112233",
+    });
   });
 
   it("rejects corrupt and out-of-range values", () => {
@@ -75,6 +93,6 @@ describe("design preferences", () => {
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("password");
     expect(serialized).not.toContain("batchRows");
-    expect(Object.keys(JSON.parse(serialized))).toHaveLength(11);
+    expect(Object.keys(JSON.parse(serialized))).toHaveLength(15);
   });
 });

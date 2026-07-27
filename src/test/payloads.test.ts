@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatPayload } from "../lib/payloads";
-import { DEFAULT_RENDER_OPTIONS, buildQrSvg } from "../lib/render";
+import { DEFAULT_RENDER_OPTIONS, buildQrSvg, type ModuleStyle } from "../lib/render";
 import { getScannabilityWarnings } from "../lib/scannability";
 
 describe("QR payload formatting", () => {
@@ -70,6 +70,47 @@ describe("exports", () => {
     });
     expect(svg).toContain('<g fill="#0F766E"');
     expect(svg).toContain('<g fill="#172554"');
+  });
+
+  it.each([
+    ["dots", "<circle"],
+    ["pixel", "width=\"0.92\""],
+    ["soft-square", "rx=\"0.2\""],
+    ["neon", "sayaqr-neon"],
+    ["split-finders", "<g fill=\"#172554\""],
+    ["sticker", "stroke=\"#172554\""],
+  ] as Array<[ModuleStyle, string]>)("renders the %s module style", (moduleStyle, expected) => {
+    const svg = buildQrSvg("hello", {
+      ...DEFAULT_RENDER_OPTIONS,
+      foreground: "#0F766E",
+      finderColor: "#172554",
+      moduleStyle,
+    });
+    expect(svg).toMatch(/^<svg/);
+    expect(svg).toContain("</svg>");
+    expect(svg).toContain(expected);
+  });
+
+  it("can render an uploaded logo without a background", () => {
+    const svg = buildQrSvg("hello", {
+      ...DEFAULT_RENDER_OPTIONS,
+      logoDataUrl: "data:image/png;base64,logo",
+      transparentBackground: true,
+      logoBackground: "none",
+    });
+    expect(svg).toContain("<image href=");
+    expect(svg).not.toContain('fill="#ffffff"');
+  });
+
+  it("can render a custom logo stroke", () => {
+    const svg = buildQrSvg("hello", {
+      ...DEFAULT_RENDER_OPTIONS,
+      logoDataUrl: "data:image/png;base64,logo",
+      logoStroke: true,
+      logoStrokeColor: "#FF00AA",
+    });
+    expect(svg).toContain('stroke="#FF00AA"');
+    expect(svg).toContain('fill="none"');
   });
 });
 

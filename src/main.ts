@@ -4,11 +4,13 @@ import { buildIntentPreview, type IntentPreview } from "./lib/intent-preview";
 import { decodeQrImageFile, rasterizeImageFileToPng } from "./lib/qr-decoder";
 import {
   calculateAutoFixValues,
+  chooseAutoFixErrorCorrection,
   LatestScanRun,
   testQrSvg,
   type ScanConfidenceResult,
 } from "./lib/scan-confidence";
 import { parseCsv, parseTextList, type CsvData } from "./lib/csv";
+import { isCompleteHexColorEntry } from "./lib/color-input";
 import {
   BatchCancellationController,
   buildBatchReportCsv,
@@ -45,6 +47,8 @@ import {
   svgToPdfBlob,
   svgToRasterBlob,
   type FinderStyle,
+  type LogoBackgroundMode,
+  type ModuleStyle,
   type QrRenderOptions,
 } from "./lib/render";
 import { createZip, type ZipInputFile } from "./lib/zip";
@@ -60,7 +64,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.6";
+const APP_VERSION = "1.9.7";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 type ExportFormat = "png" | "svg" | "webp" | "pdf";
 
@@ -181,6 +185,7 @@ let batchGenerating = false;
 const batchCancellation = new BatchCancellationController();
 let pendingQrFrame = 0;
 let pendingScanTimer = 0;
+let eccChangedManually = false;
 const latestScanRun = new LatestScanRun();
 
 function escapeHtml(value: string): string {
@@ -332,6 +337,19 @@ function renderApp(): void {
             <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
             <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square" selected>Square</option><option value="rounded">Rounded</option><option value="circle">Circle</option></select></label>
             <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
+            <details class="style-suggestions field-wide">
+              <summary>More style ideas</summary>
+              <p>These can look striking, but may scan less reliably. Keep contrast high and test before printing.</p>
+              <label class="field" for="moduleStyle"><span>Module style</span><select id="moduleStyle"><option value="classic" selected>Classic</option><option value="dots">Module dots</option><option value="pixel">Pixel blocks</option><option value="soft-square">Soft squares</option><option value="neon">Neon glow</option><option value="split-finders">Split-color finders</option><option value="sticker">Sticker border</option></select></label>
+              <div class="style-suggestion-grid" aria-label="Suggested module and finder styles">
+                <span>Module dots</span>
+                <span>Pixel blocks</span>
+                <span>Soft squares</span>
+                <span>Neon glow</span>
+                <span>Split-color finders</span>
+                <span>Sticker border</span>
+              </div>
+            </details>
             <div class="field field-wide logo-picker">
               <div class="logo-picker-header"><span>Center logo</span></div>
               <div class="logo-select-row">
@@ -348,6 +366,20 @@ function renderApp(): void {
                 <input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
               </label>
               <p id="logoUploadStatus" class="logo-upload-status" aria-live="polite"></p>
+              <div class="logo-render-options">
+                <label class="field" for="logoBackground"><span>Logo background</span><select id="logoBackground"><option value="padded" selected>Padded background</option><option value="none">No background</option></select></label>
+                <label class="switch"><input id="logoStroke" type="checkbox" /><span>Logo stroke</span></label>
+                <label class="field color-control" for="logoStrokeColorHex">
+                  <span>Stroke color</span>
+                  <span class="color-shell">
+                    <span class="color-swatch-wrap">
+                      <input id="logoStrokeColor" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.logoStrokeColor}" aria-label="Logo stroke color picker" />
+                      <span id="logoStrokeColorSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.logoStrokeColor}" aria-hidden="true"></span>
+                    </span>
+                    <input id="logoStrokeColorHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.logoStrokeColor}" inputmode="text" spellcheck="false" aria-label="Logo stroke hex color" />
+                  </span>
+                </label>
+              </div>
             </div>
             <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
             <div class="design-memory field-wide">
@@ -593,7 +625,7 @@ function updateFromQuickContent(rawValue: string): void {
   scheduleQrUpdate();
 }
 
-type ColorControlId = "foreground" | "finderColor" | "background";
+type ColorControlId = "foreground" | "finderColor" | "background" | "logoStrokeColor";
 
 function normalizeHexColor(value: string): string | null {
   const cleaned = value.trim().replace(/^#/, "");
@@ -630,6 +662,11 @@ function syncColorControl(id: ColorControlId, source: "picker" | "hex"): boolean
   hexInput.value = normalized;
   swatch.style.setProperty("--swatch-color", normalized);
   return true;
+}
+
+function markIncompleteHexColor(id: ColorControlId): void {
+  const hexInput = document.querySelector<HTMLInputElement>(`#${id}Hex`);
+  if (hexInput) hexInput.setAttribute("aria-invalid", "false");
 }
 
 function updateCustomColorPanel(): void {
@@ -713,8 +750,13 @@ const DESIGN_CONTROL_IDS = new Set([
   "margin",
   "moduleSize",
   "rounded",
+  "moduleStyle",
   "finderStyle",
   "ecc",
+  "logoBackground",
+  "logoStroke",
+  "logoStrokeColor",
+  "logoStrokeColorHex",
   "logoScale",
 ]);
 
@@ -724,9 +766,21 @@ function readDesignPreferencesFromControls(): DesignPreferences {
   const finderValue = document.querySelector<HTMLSelectElement>("#finderStyle")?.value;
   const finderStyle: FinderStyle =
     finderValue === "rounded" || finderValue === "circle" ? finderValue : DEFAULT_RENDER_OPTIONS.finderStyle;
+  const moduleValue = document.querySelector<HTMLSelectElement>("#moduleStyle")?.value;
+  const moduleStyle: ModuleStyle =
+    moduleValue === "dots" ||
+    moduleValue === "pixel" ||
+    moduleValue === "soft-square" ||
+    moduleValue === "neon" ||
+    moduleValue === "split-finders" ||
+    moduleValue === "sticker"
+      ? moduleValue
+      : DEFAULT_RENDER_OPTIONS.moduleStyle;
   const eccValue = document.querySelector<HTMLSelectElement>("#ecc")?.value;
   const ecc: QrRenderOptions["ecc"] =
     eccValue === "LOW" || eccValue === "MEDIUM" || eccValue === "QUARTILE" ? eccValue : "HIGH";
+  const logoBackgroundValue = document.querySelector<HTMLSelectElement>("#logoBackground")?.value;
+  const logoBackground: LogoBackgroundMode = logoBackgroundValue === "none" ? "none" : "padded";
 
   return {
     colorMode,
@@ -737,7 +791,11 @@ function readDesignPreferencesFromControls(): DesignPreferences {
     margin: Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin),
     moduleSize: Number(document.querySelector<HTMLInputElement>("#moduleSize")?.value ?? DEFAULT_RENDER_OPTIONS.moduleSize),
     rounded: Number(document.querySelector<HTMLInputElement>("#rounded")?.value ?? DEFAULT_RENDER_OPTIONS.rounded),
+    moduleStyle,
     finderStyle,
+    logoBackground,
+    logoStroke: document.querySelector<HTMLInputElement>("#logoStroke")?.checked ?? DEFAULT_RENDER_OPTIONS.logoStroke,
+    logoStrokeColor: readColorControl("logoStrokeColor", DEFAULT_RENDER_OPTIONS.logoStrokeColor),
     ecc,
     logoScale: Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? DEFAULT_RENDER_OPTIONS.logoScale),
   };
@@ -750,8 +808,11 @@ function applyDesignPreferences(preferences: DesignPreferences): void {
   const moduleSize = document.querySelector<HTMLInputElement>("#moduleSize");
   const rounded = document.querySelector<HTMLInputElement>("#rounded");
   const finderStyle = document.querySelector<HTMLSelectElement>("#finderStyle");
+  const moduleStyle = document.querySelector<HTMLSelectElement>("#moduleStyle");
   const ecc = document.querySelector<HTMLSelectElement>("#ecc");
   const logoScale = document.querySelector<HTMLInputElement>("#logoScale");
+  const logoBackground = document.querySelector<HTMLSelectElement>("#logoBackground");
+  const logoStroke = document.querySelector<HTMLInputElement>("#logoStroke");
 
   if (colorMode) colorMode.value = preferences.colorMode;
   writeColorControl("foreground", preferences.foreground);
@@ -761,9 +822,13 @@ function applyDesignPreferences(preferences: DesignPreferences): void {
   if (margin) margin.value = String(preferences.margin);
   if (moduleSize) moduleSize.value = String(preferences.moduleSize);
   if (rounded) rounded.value = String(preferences.rounded);
+  if (moduleStyle) moduleStyle.value = preferences.moduleStyle;
   if (finderStyle) finderStyle.value = preferences.finderStyle;
   if (ecc) ecc.value = preferences.ecc;
   if (logoScale) logoScale.value = String(preferences.logoScale);
+  if (logoBackground) logoBackground.value = preferences.logoBackground;
+  if (logoStroke) logoStroke.checked = preferences.logoStroke;
+  writeColorControl("logoStrokeColor", preferences.logoStrokeColor);
   updateCustomColorPanel();
   updateSliderLabels();
 }
@@ -824,7 +889,11 @@ function resetDesignControls(): void {
     margin: DEFAULT_RENDER_OPTIONS.margin,
     moduleSize: DEFAULT_RENDER_OPTIONS.moduleSize,
     rounded: DEFAULT_RENDER_OPTIONS.rounded,
+    moduleStyle: DEFAULT_RENDER_OPTIONS.moduleStyle,
     finderStyle: DEFAULT_RENDER_OPTIONS.finderStyle,
+    logoBackground: DEFAULT_RENDER_OPTIONS.logoBackground,
+    logoStroke: DEFAULT_RENDER_OPTIONS.logoStroke,
+    logoStrokeColor: DEFAULT_RENDER_OPTIONS.logoStrokeColor,
     ecc: DEFAULT_RENDER_OPTIONS.ecc,
     logoScale: DEFAULT_RENDER_OPTIONS.logoScale,
   });
@@ -851,11 +920,29 @@ function getRenderOptions(): QrRenderOptions {
   const margin = Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin);
   const moduleSize = Number(document.querySelector<HTMLInputElement>("#moduleSize")?.value ?? DEFAULT_RENDER_OPTIONS.moduleSize);
   const rounded = Number(document.querySelector<HTMLInputElement>("#rounded")?.value ?? DEFAULT_RENDER_OPTIONS.rounded);
+  const moduleStyle = (document.querySelector<HTMLSelectElement>("#moduleStyle")?.value ?? DEFAULT_RENDER_OPTIONS.moduleStyle) as ModuleStyle;
   const finderStyle = (document.querySelector<HTMLSelectElement>("#finderStyle")?.value ?? DEFAULT_RENDER_OPTIONS.finderStyle) as FinderStyle;
+  const logoBackground = (document.querySelector<HTMLSelectElement>("#logoBackground")?.value ?? DEFAULT_RENDER_OPTIONS.logoBackground) as LogoBackgroundMode;
   const ecc = (document.querySelector<HTMLSelectElement>("#ecc")?.value ?? DEFAULT_RENDER_OPTIONS.ecc) as QrRenderOptions["ecc"];
   const logoScale = Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? DEFAULT_RENDER_OPTIONS.logoScale);
 
-  return { foreground, finderColor, background, transparentBackground, margin, moduleSize, rounded, finderStyle, logoDataUrl, logoScale, ecc };
+  return {
+    foreground,
+    finderColor,
+    background,
+    transparentBackground,
+    margin,
+    moduleSize,
+    rounded,
+    moduleStyle,
+    finderStyle,
+    logoDataUrl,
+    logoBackground: logoBackground === "none" ? "none" : "padded",
+    logoStroke: document.querySelector<HTMLInputElement>("#logoStroke")?.checked ?? DEFAULT_RENDER_OPTIONS.logoStroke,
+    logoStrokeColor: readColorControl("logoStrokeColor", DEFAULT_RENDER_OPTIONS.logoStrokeColor),
+    logoScale,
+    ecc,
+  };
 }
 
 function updateSliderLabels(): void {
@@ -912,6 +999,12 @@ function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: 
   const renderedItems = items.map((item) => ({ level: item.level, message: item.message }));
   const logoWarning = getLogoMismatchWarning(logoSelection, currentPayload);
   if (logoWarning) renderedItems.push({ level: "warning", message: logoWarning });
+  if (currentPayload.trim() && options.logoDataUrl && options.logoBackground === "none") {
+    renderedItems.push({ level: "info", message: "Logo background is off. Use high error correction and test the scan." });
+  }
+  if (currentPayload.trim() && options.moduleStyle !== "classic") {
+    renderedItems.push({ level: "warning", message: "Stylized modules may scan less reliably. Test with a phone before printing." });
+  }
   for (const message of extra) renderedItems.push({ level: "danger", message });
 
   section.dataset.state = !currentPayload.trim() ? "empty" : renderedItems.length ? "issues" : "clear";
@@ -1005,7 +1098,7 @@ function applyAutomaticFix(): void {
   const options = getRenderOptions();
   const fixed = calculateAutoFixValues({
     margin: options.margin,
-    ecc: options.ecc,
+    ecc: chooseAutoFixErrorCorrection(currentPayload, options.ecc, eccChangedManually),
     logoScale: options.logoScale,
     rounded: options.rounded,
     transparentBackground: options.transparentBackground,
@@ -1024,6 +1117,7 @@ function applyAutomaticFix(): void {
   if (logoScale) logoScale.value = String(fixed.logoScale);
   if (rounded) rounded.value = String(fixed.rounded);
   if (transparent) transparent.checked = false;
+  if (fixed.ecc !== options.ecc) eccChangedManually = false;
 
   if (
     fixed.foreground !== options.foreground ||
@@ -1587,15 +1681,20 @@ function wireEvents(): void {
         return;
       }
 
-      if (target.id === "foreground" || target.id === "finderColor" || target.id === "background") {
+      if (target.id === "foreground" || target.id === "finderColor" || target.id === "background" || target.id === "logoStrokeColor") {
         syncColorControl(target.id, "picker");
         scheduleQrUpdate();
         persistDesignIfEnabled();
         return;
       }
 
-      if (target.id === "foregroundHex" || target.id === "finderColorHex" || target.id === "backgroundHex") {
-        if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) {
+      if (target.id === "foregroundHex" || target.id === "finderColorHex" || target.id === "backgroundHex" || target.id === "logoStrokeColorHex") {
+        const colorId = target.id.replace("Hex", "") as ColorControlId;
+        if (!isCompleteHexColorEntry(target.value)) {
+          markIncompleteHexColor(colorId);
+          return;
+        }
+        if (syncColorControl(colorId, "hex")) {
           scheduleQrUpdate();
           persistDesignIfEnabled();
         }
@@ -1608,6 +1707,7 @@ function wireEvents(): void {
       }
 
       if (DESIGN_CONTROL_IDS.has(target.id)) {
+        if (target.id === "ecc") eccChangedManually = true;
         persistDesignIfEnabled();
         if (target.id === "ecc") refreshBatchValidation();
       }
