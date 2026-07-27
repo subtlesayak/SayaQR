@@ -8,6 +8,7 @@ export interface ScannabilityWarning {
 
 export interface ScannabilityInput {
   foreground: string;
+  finderColor?: string;
   background: string;
   transparentBackground: boolean;
   margin: number;
@@ -62,13 +63,20 @@ export function contrastRatio(foreground: string, background: string): number {
 
 export function getScannabilityWarnings(input: ScannabilityInput): ScannabilityWarning[] {
   const warnings: ScannabilityWarning[] = [];
-  const contrast = contrastRatio(input.foreground, input.background);
+  const moduleContrast = contrastRatio(input.foreground, input.background);
+  const finderContrast = contrastRatio(input.finderColor ?? input.foreground, input.background);
+  const lowestContrast = Math.min(moduleContrast, finderContrast);
 
-  if (!input.transparentBackground && contrast < 4.5) {
+  if (!input.transparentBackground && lowestContrast < 4.5) {
+    const affected = moduleContrast < 4.5 && finderContrast < 4.5
+      ? "Module and finder colors"
+      : moduleContrast < 4.5
+        ? "Module color"
+        : "Finder color";
     warnings.push({
       id: "contrast",
-      level: contrast < 3 ? "danger" : "warning",
-      message: `Contrast ratio is ${contrast.toFixed(2)}:1. Use a darker foreground or lighter background.`,
+      level: lowestContrast < 3 ? "danger" : "warning",
+      message: `${affected} ${affected === "Module and finder colors" ? "need" : "needs"} more contrast with the background (${lowestContrast.toFixed(2)}:1).`,
     });
   }
 

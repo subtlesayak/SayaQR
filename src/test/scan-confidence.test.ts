@@ -47,6 +47,7 @@ describe("Guardian conservative fixes", () => {
       rounded: 0.5,
       transparentBackground: true,
       foreground: "#AAAAAA",
+      finderColor: "#BBBBBB",
       background: "#FFFFFF",
     })).toEqual({
       margin: 4,
@@ -55,6 +56,7 @@ describe("Guardian conservative fixes", () => {
       rounded: 0.15,
       transparentBackground: false,
       foreground: "#0F172A",
+      finderColor: "#0F172A",
       background: "#FFFFFF",
     });
   });
@@ -67,6 +69,7 @@ describe("Guardian conservative fixes", () => {
       rounded: 0.1,
       transparentBackground: false,
       foreground: "#111827",
+      finderColor: "#172554",
       background: "#FFFFFF",
     })).toEqual({
       margin: 6,
@@ -75,6 +78,7 @@ describe("Guardian conservative fixes", () => {
       rounded: 0.1,
       transparentBackground: false,
       foreground: "#111827",
+      finderColor: "#172554",
       background: "#FFFFFF",
     });
   });

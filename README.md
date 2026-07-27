@@ -24,7 +24,7 @@
   <img src="./docs/sayaqr-interface.png" alt="SayaQR interface showing a locally generated URL QR code and export controls" width="1100">
 </p>
 
-<p align="center"><sub>SayaQR v1.9.5 · content → inspect → download</sub></p>
+<p align="center"><sub>SayaQR v1.9.6 · content → inspect → download</sub></p>
 
 ## Why SayaQR
 
@@ -56,7 +56,7 @@
 | Area | Included |
 | --- | --- |
 | **Intent-aware input** | Automatic type detection, structured field editing, human-readable previews, and content-aware filenames. |
-| **Design controls** | Foreground and background colors, transparency, quiet zone, module size, rounded modules, finder style, and center logos. |
+| **Design controls** | Independent module, finder, and background colors, transparency, quiet zone, module size, rounded modules, finder style, and center logos. |
 | **Scan safety** | Contrast, quiet-zone, logo-size, and payload-density warnings plus local blur, size, contrast, and rotation simulations. |
 | **Flexible output** | Inline PNG, SVG, WebP, and WYSIWYG PDF downloads; image copy and native sharing when supported. |
 | **Local QR import** | Decode QR screenshots through file selection, drag and drop, or paste without uploading the image. |
