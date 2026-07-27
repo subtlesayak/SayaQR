@@ -2,6 +2,19 @@
 
 All notable changes to SayaQR are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Added a collapsed More style ideas section with working Classic, Module dots, Pixel blocks, Soft squares, Neon glow, Split-color finders, and Sticker border styles.
+- Added logo rendering controls for padded background, no background, and custom logo stroke color.
+
+### Changed
+
+- Automatic scan fixes now optimize error correction for dense QR content unless the error-correction dropdown was changed manually.
+- Typed hex color values now wait for a complete 24-bit or 32-bit value before refreshing scan checks.
+- Logo backing now uses equal padding on every side of the logo box.
+
 ## [1.9.6] - 2026-07-27
 
 ### Added

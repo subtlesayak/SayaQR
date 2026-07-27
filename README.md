@@ -56,7 +56,7 @@
 | Area | Included |
 | --- | --- |
 | **Intent-aware input** | Automatic type detection, structured field editing, human-readable previews, and content-aware filenames. |
-| **Design controls** | Independent module, finder, and background colors, transparency, quiet zone, module size, rounded modules, finder style, and center logos. |
+| **Design controls** | Independent module, finder, and background colors, transparency, quiet zone, module size, rounded modules, finder style, center logos with optional backing/stroke, and collapsed advanced module styles. |
 | **Scan safety** | Contrast, quiet-zone, logo-size, and payload-density warnings plus local blur, size, contrast, and rotation simulations. |
 | **Flexible output** | Inline PNG, SVG, WebP, and WYSIWYG PDF downloads; image copy and native sharing when supported. |
 | **Local QR import** | Decode QR screenshots through file selection, drag and drop, or paste without uploading the image. |
@@ -67,6 +67,8 @@
 ## Privacy by design
 
 SayaQR has no backend and makes no content API calls. QR payloads, Wi-Fi passwords, UPI details, contacts, locations, events, imported images, custom logos, and batch rows remain on the device.
+
+Advanced module styles include Classic, Module dots, Pixel blocks, Soft squares, Neon glow, Split-color finders, and Sticker border. Stylized QR codes can scan less reliably than Classic, so SayaQR shows an extra scan warning when one is selected.
 
 | Data | Behavior |
 | --- | --- |

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateAutoFixValues,
+  chooseAutoFixErrorCorrection,
   decodedPayloadMatches,
   gradeScanResults,
   LatestScanRun,
@@ -42,7 +43,7 @@ describe("Guardian conservative fixes", () => {
   it("changes only bounded safety values and repairs low contrast", () => {
     expect(calculateAutoFixValues({
       margin: 1,
-      ecc: "LOW",
+      ecc: "HIGH",
       logoScale: 0.32,
       rounded: 0.5,
       transparentBackground: true,
@@ -73,7 +74,7 @@ describe("Guardian conservative fixes", () => {
       background: "#FFFFFF",
     })).toEqual({
       margin: 6,
-      ecc: "HIGH",
+      ecc: "MEDIUM",
       logoScale: 0.12,
       rounded: 0.1,
       transparentBackground: false,
@@ -81,6 +82,20 @@ describe("Guardian conservative fixes", () => {
       finderColor: "#172554",
       background: "#FFFFFF",
     });
+  });
+
+  it("keeps manually selected error correction unchanged", () => {
+    const payload = "https://example.com/" + "a".repeat(900);
+    expect(chooseAutoFixErrorCorrection(payload, "HIGH", true)).toBe("HIGH");
+  });
+
+  it("chooses a less dense error correction level when the default is oversized", () => {
+    const payload = "https://example.com/" + "a".repeat(900);
+    expect(chooseAutoFixErrorCorrection(payload, "HIGH", false)).not.toBe("HIGH");
+  });
+
+  it("keeps high error correction for compact payloads", () => {
+    expect(chooseAutoFixErrorCorrection("https://example.com", "HIGH", false)).toBe("HIGH");
   });
 
   it("prevents stale scan runs from becoming current", () => {

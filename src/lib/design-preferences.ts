@@ -1,4 +1,4 @@
-import type { FinderStyle } from "./render";
+import type { FinderStyle, LogoBackgroundMode, ModuleStyle } from "./render";
 import type { ErrorCorrectionLevel } from "./qr";
 
 export const DESIGN_PREFERENCE_KEY = "sayaqr:design:v1";
@@ -14,7 +14,11 @@ export interface DesignPreferences {
   margin: number;
   moduleSize: number;
   rounded: number;
+  moduleStyle: ModuleStyle;
   finderStyle: FinderStyle;
+  logoBackground: LogoBackgroundMode;
+  logoStroke: boolean;
+  logoStrokeColor: string;
   ecc: ErrorCorrectionLevel;
   logoScale: number;
 }
@@ -27,7 +31,9 @@ export interface StorageLike {
 
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 const COLOR_MODES: DesignColorMode[] = ["default", "logo", "custom"];
+const MODULE_STYLES: ModuleStyle[] = ["classic", "dots", "pixel", "soft-square", "neon", "split-finders", "sticker"];
 const FINDER_STYLES: FinderStyle[] = ["square", "rounded", "circle"];
+const LOGO_BACKGROUNDS: LogoBackgroundMode[] = ["padded", "none"];
 const ECC_LEVELS: ErrorCorrectionLevel[] = ["LOW", "MEDIUM", "QUARTILE", "HIGH"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,7 +64,11 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
     margin,
     moduleSize,
     rounded,
+    moduleStyle,
     finderStyle,
+    logoBackground,
+    logoStroke,
+    logoStrokeColor,
     ecc,
     logoScale,
   } = value;
@@ -74,7 +84,11 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
     !isIntegerInRange(margin, 0, 10) ||
     !isIntegerInRange(moduleSize, 4, 28) ||
     !isFiniteNumberInRange(rounded, 0, 1) ||
+    (moduleStyle !== undefined && !isOneOf(moduleStyle, MODULE_STYLES)) ||
     !isOneOf(finderStyle, FINDER_STYLES) ||
+    (logoBackground !== undefined && !isOneOf(logoBackground, LOGO_BACKGROUNDS)) ||
+    (logoStroke !== undefined && typeof logoStroke !== "boolean") ||
+    (logoStrokeColor !== undefined && (typeof logoStrokeColor !== "string" || !COLOR_PATTERN.test(logoStrokeColor))) ||
     !isOneOf(ecc, ECC_LEVELS) ||
     !isFiniteNumberInRange(logoScale, 0.05, 0.35)
   ) {
@@ -90,7 +104,11 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
     margin,
     moduleSize,
     rounded,
+    moduleStyle: typeof moduleStyle === "string" ? moduleStyle : "classic",
     finderStyle,
+    logoBackground: typeof logoBackground === "string" ? logoBackground : "padded",
+    logoStroke: typeof logoStroke === "boolean" ? logoStroke : false,
+    logoStrokeColor: (typeof logoStrokeColor === "string" ? logoStrokeColor : foreground).toUpperCase(),
     ecc,
     logoScale,
   };
@@ -109,7 +127,11 @@ export function serializeDesignPreferences(value: DesignPreferences): string {
     margin: validated.margin,
     moduleSize: validated.moduleSize,
     rounded: validated.rounded,
+    moduleStyle: validated.moduleStyle,
     finderStyle: validated.finderStyle,
+    logoBackground: validated.logoBackground,
+    logoStroke: validated.logoStroke,
+    logoStrokeColor: validated.logoStrokeColor,
     ecc: validated.ecc,
     logoScale: validated.logoScale,
   });
