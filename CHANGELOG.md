@@ -2,7 +2,7 @@
 
 All notable changes to SayaQR are documented here.
 
-## [Unreleased]
+## [1.9.7] - 2026-07-27
 
 ### Added
 

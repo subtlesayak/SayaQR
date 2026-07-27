@@ -64,7 +64,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.6";
+const APP_VERSION = "1.9.7";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 type ExportFormat = "png" | "svg" | "webp" | "pdf";
 
