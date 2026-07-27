@@ -8,6 +8,7 @@ export type DesignColorMode = "default" | "logo" | "custom";
 export interface DesignPreferences {
   colorMode: DesignColorMode;
   foreground: string;
+  finderColor: string;
   background: string;
   transparentBackground: boolean;
   margin: number;
@@ -51,6 +52,7 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
   const {
     colorMode,
     foreground,
+    finderColor,
     background,
     transparentBackground,
     margin,
@@ -65,6 +67,7 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
     !isOneOf(colorMode, COLOR_MODES) ||
     typeof foreground !== "string" ||
     !COLOR_PATTERN.test(foreground) ||
+    (finderColor !== undefined && (typeof finderColor !== "string" || !COLOR_PATTERN.test(finderColor))) ||
     typeof background !== "string" ||
     !COLOR_PATTERN.test(background) ||
     typeof transparentBackground !== "boolean" ||
@@ -81,6 +84,7 @@ export function validateDesignPreferences(value: unknown): DesignPreferences | n
   return {
     colorMode,
     foreground: foreground.toUpperCase(),
+    finderColor: (typeof finderColor === "string" ? finderColor : foreground).toUpperCase(),
     background: background.toUpperCase(),
     transparentBackground,
     margin,
@@ -99,6 +103,7 @@ export function serializeDesignPreferences(value: DesignPreferences): string {
   return JSON.stringify({
     colorMode: validated.colorMode,
     foreground: validated.foreground,
+    finderColor: validated.finderColor,
     background: validated.background,
     transparentBackground: validated.transparentBackground,
     margin: validated.margin,

@@ -2,6 +2,23 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.6] - 2026-07-27
+
+### Added
+
+- Added independent module and finder-pattern colors to the existing Custom color controls.
+- Added finder-color contrast checks and conservative automatic repair.
+- Included the finder color in opt-in local design preferences with migration for older saved designs.
+
+### Changed
+
+- Renamed the previous Foreground control to Modules for clearer QR-specific wording.
+- Kept Default and Logo color modes visually unchanged while applying custom colors consistently to preview, batch output, and every export format.
+
+### Fixed
+
+- Removed the legacy 320-pixel body floor that could create a narrow horizontal scroll beside a visible scrollbar.
+
 ## [1.9.5] - 2026-07-16
 
 ### Fixed

@@ -12,6 +12,7 @@ import {
 const validPreferences: DesignPreferences = {
   colorMode: "custom",
   foreground: "#112233",
+  finderColor: "#334455",
   background: "#ffffff",
   transparentBackground: false,
   margin: 4,
@@ -35,8 +36,14 @@ describe("design preferences", () => {
     expect(validateDesignPreferences(validPreferences)).toEqual({
       ...validPreferences,
       foreground: "#112233",
+      finderColor: "#334455",
       background: "#FFFFFF",
     });
+  });
+
+  it("migrates saved designs that predate finder colors", () => {
+    const { finderColor: _finderColor, ...legacyPreferences } = validPreferences;
+    expect(validateDesignPreferences(legacyPreferences)?.finderColor).toBe("#112233");
   });
 
   it("rejects corrupt and out-of-range values", () => {
@@ -68,6 +75,6 @@ describe("design preferences", () => {
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("password");
     expect(serialized).not.toContain("batchRows");
-    expect(Object.keys(JSON.parse(serialized))).toHaveLength(10);
+    expect(Object.keys(JSON.parse(serialized))).toHaveLength(11);
   });
 });

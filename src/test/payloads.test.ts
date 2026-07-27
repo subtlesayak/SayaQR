@@ -61,6 +61,16 @@ describe("exports", () => {
     expect(svg).toContain("<rect");
     expect(svg).toContain("</svg>");
   });
+
+  it("renders module and finder colors independently", () => {
+    const svg = buildQrSvg("hello", {
+      ...DEFAULT_RENDER_OPTIONS,
+      foreground: "#0F766E",
+      finderColor: "#172554",
+    });
+    expect(svg).toContain('<g fill="#0F766E"');
+    expect(svg).toContain('<g fill="#172554"');
+  });
 });
 
 describe("scannability warnings", () => {
@@ -75,6 +85,20 @@ describe("scannability warnings", () => {
     });
 
     expect(warnings.some((warning) => warning.id === "contrast")).toBe(true);
+  });
+
+  it("warns when only the finder color has low contrast", () => {
+    const warnings = getScannabilityWarnings({
+      foreground: "#000000",
+      finderColor: "#EEEEEE",
+      background: "#FFFFFF",
+      transparentBackground: false,
+      margin: 4,
+      logoScale: 0,
+      payloadLength: 20,
+    });
+
+    expect(warnings.find((warning) => warning.id === "contrast")?.message).toContain("Finder color");
   });
 
   it("warns when quiet zone is too small", () => {

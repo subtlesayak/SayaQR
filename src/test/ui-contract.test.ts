@@ -53,6 +53,7 @@ describe("intent-first UI contract", () => {
 
   it("preserves custom color, logo, and offline controls", () => {
     expect(mainSource).toContain('id="foregroundHex"');
+    expect(mainSource).toContain('id="finderColorHex"');
     expect(mainSource).toContain('id="backgroundHex"');
     expect(mainSource).toContain('id="logoPresetSelect"');
     expect(mainSource).toContain('id="logoUpload"');

@@ -60,7 +60,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.5";
+const APP_VERSION = "1.9.6";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 type ExportFormat = "png" | "svg" | "webp" | "pdf";
 
@@ -296,13 +296,23 @@ function renderApp(): void {
             <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
             <div id="customColorPanel" class="custom-color-panel" hidden>
               <label class="field design-pair color-control" for="foregroundHex">
-                <span>Foreground</span>
+                <span>Modules</span>
                 <span class="color-shell">
                   <span class="color-swatch-wrap">
-                    <input id="foreground" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Foreground color picker" />
+                    <input id="foreground" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.foreground}" aria-label="Module color picker" />
                     <span id="foregroundSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.foreground}" aria-hidden="true"></span>
                   </span>
-                  <input id="foregroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Foreground hex color" />
+                  <input id="foregroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.foreground}" inputmode="text" spellcheck="false" aria-label="Module hex color" />
+                </span>
+              </label>
+              <label class="field design-pair color-control" for="finderColorHex">
+                <span>Finders</span>
+                <span class="color-shell">
+                  <span class="color-swatch-wrap">
+                    <input id="finderColor" class="native-color-input" type="color" value="${DEFAULT_RENDER_OPTIONS.finderColor}" aria-label="Finder color picker" />
+                    <span id="finderColorSwatch" class="color-swatch" style="--swatch-color: ${DEFAULT_RENDER_OPTIONS.finderColor}" aria-hidden="true"></span>
+                  </span>
+                  <input id="finderColorHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.finderColor}" inputmode="text" spellcheck="false" aria-label="Finder hex color" />
                 </span>
               </label>
               <label class="field design-pair color-control" for="backgroundHex">
@@ -583,7 +593,7 @@ function updateFromQuickContent(rawValue: string): void {
   scheduleQrUpdate();
 }
 
-type ColorControlId = "foreground" | "background";
+type ColorControlId = "foreground" | "finderColor" | "background";
 
 function normalizeHexColor(value: string): string | null {
   const cleaned = value.trim().replace(/^#/, "");
@@ -695,6 +705,8 @@ const DESIGN_CONTROL_IDS = new Set([
   "colorMode",
   "foreground",
   "foregroundHex",
+  "finderColor",
+  "finderColorHex",
   "background",
   "backgroundHex",
   "transparentBackground",
@@ -719,6 +731,7 @@ function readDesignPreferencesFromControls(): DesignPreferences {
   return {
     colorMode,
     foreground: readColorControl("foreground", DEFAULT_RENDER_OPTIONS.foreground),
+    finderColor: readColorControl("finderColor", DEFAULT_RENDER_OPTIONS.finderColor),
     background: readColorControl("background", DEFAULT_RENDER_OPTIONS.background),
     transparentBackground: document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false,
     margin: Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin),
@@ -742,6 +755,7 @@ function applyDesignPreferences(preferences: DesignPreferences): void {
 
   if (colorMode) colorMode.value = preferences.colorMode;
   writeColorControl("foreground", preferences.foreground);
+  writeColorControl("finderColor", preferences.finderColor);
   writeColorControl("background", preferences.background);
   if (transparent) transparent.checked = preferences.transparentBackground;
   if (margin) margin.value = String(preferences.margin);
@@ -804,6 +818,7 @@ function resetDesignControls(): void {
   applyDesignPreferences({
     colorMode: "default",
     foreground: DEFAULT_RENDER_OPTIONS.foreground,
+    finderColor: DEFAULT_RENDER_OPTIONS.finderColor,
     background: DEFAULT_RENDER_OPTIONS.background,
     transparentBackground: false,
     margin: DEFAULT_RENDER_OPTIONS.margin,
@@ -828,6 +843,9 @@ function getRenderOptions(): QrRenderOptions {
     : colorMode === "logo"
       ? logoColor ?? DEFAULT_RENDER_OPTIONS.foreground
       : DEFAULT_RENDER_OPTIONS.foreground;
+  const finderColor = useCustomColors
+    ? readColorControl("finderColor", foreground)
+    : foreground;
   const background = useCustomColors ? readColorControl("background", DEFAULT_RENDER_OPTIONS.background) : DEFAULT_RENDER_OPTIONS.background;
   const transparentBackground = useCustomColors ? (document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false) : false;
   const margin = Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin);
@@ -837,7 +855,7 @@ function getRenderOptions(): QrRenderOptions {
   const ecc = (document.querySelector<HTMLSelectElement>("#ecc")?.value ?? DEFAULT_RENDER_OPTIONS.ecc) as QrRenderOptions["ecc"];
   const logoScale = Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? DEFAULT_RENDER_OPTIONS.logoScale);
 
-  return { foreground, background, transparentBackground, margin, moduleSize, rounded, finderStyle, logoDataUrl, logoScale, ecc };
+  return { foreground, finderColor, background, transparentBackground, margin, moduleSize, rounded, finderStyle, logoDataUrl, logoScale, ecc };
 }
 
 function updateSliderLabels(): void {
@@ -883,6 +901,7 @@ function renderWarnings(options: QrRenderOptions, payloadLength: number, extra: 
   if (!warnings || !status || !section) return;
   const items = getScannabilityWarnings({
     foreground: options.foreground,
+    finderColor: options.finderColor,
     background: options.background,
     transparentBackground: options.transparentBackground,
     margin: options.margin,
@@ -991,6 +1010,7 @@ function applyAutomaticFix(): void {
     rounded: options.rounded,
     transparentBackground: options.transparentBackground,
     foreground: options.foreground,
+    finderColor: options.finderColor,
     background: options.background,
   });
 
@@ -1005,10 +1025,15 @@ function applyAutomaticFix(): void {
   if (rounded) rounded.value = String(fixed.rounded);
   if (transparent) transparent.checked = false;
 
-  if (fixed.foreground !== options.foreground || fixed.background !== options.background) {
+  if (
+    fixed.foreground !== options.foreground ||
+    fixed.finderColor !== options.finderColor ||
+    fixed.background !== options.background
+  ) {
     const colorMode = document.querySelector<HTMLSelectElement>("#colorMode");
     if (colorMode) colorMode.value = "custom";
     writeColorControl("foreground", fixed.foreground);
+    writeColorControl("finderColor", fixed.finderColor);
     writeColorControl("background", fixed.background);
     updateCustomColorPanel();
   }
@@ -1562,14 +1587,14 @@ function wireEvents(): void {
         return;
       }
 
-      if (target.id === "foreground" || target.id === "background") {
+      if (target.id === "foreground" || target.id === "finderColor" || target.id === "background") {
         syncColorControl(target.id, "picker");
         scheduleQrUpdate();
         persistDesignIfEnabled();
         return;
       }
 
-      if (target.id === "foregroundHex" || target.id === "backgroundHex") {
+      if (target.id === "foregroundHex" || target.id === "finderColorHex" || target.id === "backgroundHex") {
         if (syncColorControl(target.id.replace("Hex", "") as ColorControlId, "hex")) {
           scheduleQrUpdate();
           persistDesignIfEnabled();

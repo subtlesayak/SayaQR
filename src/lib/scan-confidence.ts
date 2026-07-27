@@ -29,6 +29,7 @@ export interface AutoFixValues {
   rounded: number;
   transparentBackground: boolean;
   foreground: string;
+  finderColor: string;
   background: string;
 }
 
@@ -69,14 +70,17 @@ export function gradeScanResults(cases: ScanCaseResult[]): ScanConfidenceResult 
 }
 
 export function calculateAutoFixValues(values: AutoFixValues): AutoFixValues {
-  const lowContrast = contrastRatio(values.foreground, values.background) < 4.5;
+  const lowModuleContrast = contrastRatio(values.foreground, values.background) < 4.5;
+  const lowFinderContrast = contrastRatio(values.finderColor, values.background) < 4.5;
+  const lowContrast = lowModuleContrast || lowFinderContrast;
   return {
     margin: Math.max(4, values.margin),
     ecc: "HIGH",
     logoScale: Math.min(0.2, values.logoScale),
     rounded: Math.min(0.15, values.rounded),
     transparentBackground: false,
-    foreground: lowContrast ? "#0F172A" : values.foreground,
+    foreground: lowModuleContrast ? "#0F172A" : values.foreground,
+    finderColor: lowFinderContrast ? "#0F172A" : values.finderColor,
     background: lowContrast ? "#FFFFFF" : values.background,
   };
 }

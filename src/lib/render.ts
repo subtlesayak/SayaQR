@@ -5,6 +5,7 @@ export type FinderStyle = "square" | "rounded" | "circle";
 
 export interface QrRenderOptions {
   foreground: string;
+  finderColor: string;
   background: string;
   transparentBackground: boolean;
   margin: number;
@@ -18,6 +19,7 @@ export interface QrRenderOptions {
 
 export const DEFAULT_RENDER_OPTIONS: QrRenderOptions = {
   foreground: "#0f172a",
+  finderColor: "#0f172a",
   background: "#ffffff",
   transparentBackground: false,
   margin: 4,
@@ -91,6 +93,7 @@ export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): stri
   const totalModules = qr.size + margin * 2;
   const pixelSize = totalModules * moduleSize;
   const fg = escapeXml(options.foreground);
+  const finder = escapeXml(options.finderColor);
   const bg = escapeXml(options.background);
   const parts: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${pixelSize}" height="${pixelSize}" viewBox="0 0 ${totalModules} ${totalModules}" role="img" aria-label="QR code">`,
@@ -108,10 +111,19 @@ export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): stri
       }
     }
   }
-  for (const origin of finderOrigins(qr.size)) {
-    parts.push(drawFinder(origin, margin, options));
+  if (finder === fg) {
+    for (const origin of finderOrigins(qr.size)) {
+      parts.push(drawFinder(origin, margin, options));
+    }
+    parts.push("</g>");
+  } else {
+    parts.push("</g>");
+    parts.push(`<g fill="${finder}" shape-rendering="geometricPrecision">`);
+    for (const origin of finderOrigins(qr.size)) {
+      parts.push(drawFinder(origin, margin, options));
+    }
+    parts.push("</g>");
   }
-  parts.push("</g>");
 
   if (options.logoDataUrl) {
     const logoSize = Math.max(1, qr.size * Math.max(0.05, Math.min(0.35, options.logoScale)));

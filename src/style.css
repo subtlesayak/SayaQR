@@ -15,7 +15,7 @@
 
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100vh;
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.04), transparent 260px),
@@ -433,7 +433,7 @@ input[type="color"] {
 
 .custom-color-panel {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 12px;
   border: 1px solid #d7efe8;
@@ -1773,6 +1773,10 @@ summary {
 
   .design-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .custom-color-panel {
+    grid-template-columns: 1fr;
   }
 
   .batch-intro {
