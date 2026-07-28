@@ -80,7 +80,7 @@ const MODULE_STYLE_HINTS: Record<ModuleStyle, string> = {
   dots: "Turns data modules into dots while keeping finder corners clear.",
   pixel: "Slightly inset blocky modules for a crisp pixel-art look.",
   "soft-square": "Uses smaller rounded squares for a softer printed feel.",
-  neon: "Adds a subtle glow around modules. Use a brighter custom module color to make it visible.",
+  neon: "Adds a cyan glow and accent stroke around modules so the style is visibly different.",
   "split-finders": "Uses finder color for outer corners and module color for finder centers. Set different module and finder colors to see it.",
   sticker: "Adds a rounded sticker-style outer border around the QR.",
 };

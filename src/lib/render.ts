@@ -40,6 +40,8 @@ export const DEFAULT_RENDER_OPTIONS: QrRenderOptions = {
   ecc: "HIGH",
 };
 
+const NEON_ACCENT = "#22D3EE";
+
 function escapeXml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -76,7 +78,7 @@ function moduleRect(x: number, y: number, options: QrRenderOptions): string {
     return `<rect x="${x + 0.06}" y="${y + 0.06}" width="0.88" height="0.88" rx="0.2" ry="0.2"/>`;
   }
   if (options.moduleStyle === "neon") {
-    return `<rect x="${x + 0.08}" y="${y + 0.08}" width="0.84" height="0.84" rx="0.18" ry="0.18"/>`;
+    return `<rect x="${x + 0.08}" y="${y + 0.08}" width="0.84" height="0.84" rx="0.18" ry="0.18" stroke="${NEON_ACCENT}" stroke-width="0.12"/>`;
   }
   const round = Math.max(0, Math.min(0.48, options.rounded * 0.48));
   return `<rect x="${x}" y="${y}" width="1" height="1" rx="${round}" ry="${round}"/>`;
@@ -122,7 +124,7 @@ export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): stri
   ];
 
   if (options.moduleStyle === "neon") {
-    parts.push(`<defs><filter id="sayaqr-neon" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="0" stdDeviation="0.16" flood-color="${fg}" flood-opacity="0.55"/></filter></defs>`);
+    parts.push(`<defs><filter id="sayaqr-neon" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0" stdDeviation="0.18" flood-color="${NEON_ACCENT}" flood-opacity="0.8"/></filter></defs>`);
   }
 
   if (!options.transparentBackground) {

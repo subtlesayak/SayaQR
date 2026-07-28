@@ -8,6 +8,7 @@ All notable changes to SayaQR are documented here.
 
 - Added a default `example.com` QR so new users see a working preview immediately.
 - Added plain-language module style guidance for Classic, dots, pixel, soft square, neon, split-color finder, and sticker styles.
+- Added a visible cyan accent stroke to the Neon glow style so the preset reads clearly in preview and exports.
 
 ### Changed
 

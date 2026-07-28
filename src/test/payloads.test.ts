@@ -76,7 +76,7 @@ describe("exports", () => {
     ["dots", "<circle"],
     ["pixel", "width=\"0.92\""],
     ["soft-square", "rx=\"0.2\""],
-    ["neon", "sayaqr-neon"],
+    ["neon", 'stroke="#22D3EE"'],
     ["split-finders", "<g fill=\"#172554\""],
     ["sticker", "stroke=\"#172554\""],
   ] as Array<[ModuleStyle, string]>)("renders the %s module style", (moduleStyle, expected) => {
