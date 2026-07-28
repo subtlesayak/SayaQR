@@ -394,11 +394,15 @@ function renderApp(): void {
             <details class="nested-disclosure advanced-design field-wide">
               <summary>Advanced scan settings</summary>
               <div class="nested-body advanced-grid">
-                <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
-                <label class="field"><span>Export module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /><small class="control-hint">Changes downloaded image dimensions. The preview scales to fit.</small></label>
-                <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
-                <label class="switch design-save"><input id="rememberDesign" type="checkbox" /><span>Use this design next time</span></label>
-                <button id="resetDesign" class="secondary-action reset-design-action" type="button">Reset design</button>
+                <div class="advanced-size-row field-wide">
+                  <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
+                  <label class="field"><span>Export module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /><small class="control-hint">Changes downloaded image dimensions. The preview scales to fit.</small></label>
+                </div>
+                <div class="advanced-preference-row field-wide">
+                  <label class="field"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
+                  <label class="switch design-save"><input id="rememberDesign" type="checkbox" /><span>Use this design next time</span></label>
+                  <button id="resetDesign" class="secondary-action reset-design-action" type="button">Reset design</button>
+                </div>
                 <p id="designMemoryStatus" class="design-memory-status field-wide" aria-live="polite"></p>
               </div>
             </details>

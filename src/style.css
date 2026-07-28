@@ -833,6 +833,20 @@ input[type="file"] {
 }
 
 .advanced-grid {
+  grid-template-columns: 1fr;
+}
+
+.advanced-size-row,
+.advanced-preference-row {
+  display: grid;
+  gap: 12px;
+}
+
+.advanced-size-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.advanced-preference-row {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -1945,6 +1959,11 @@ summary {
   }
 
   .advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .advanced-size-row,
+  .advanced-preference-row {
     grid-template-columns: 1fr;
   }
 
