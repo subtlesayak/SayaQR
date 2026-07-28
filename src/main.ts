@@ -64,7 +64,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.7";
+const APP_VERSION = "1.9.8";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 type ExportFormat = "png" | "svg" | "webp" | "pdf";
 
@@ -75,7 +75,18 @@ const EXPORT_FORMAT_GUIDANCE: Record<ExportFormat, string> = {
   pdf: "Print-ready; transparent backgrounds become white",
 };
 
+const MODULE_STYLE_HINTS: Record<ModuleStyle, string> = {
+  classic: "Full square modules. The most reliable everyday QR style.",
+  dots: "Turns data modules into dots while keeping finder corners clear.",
+  pixel: "Slightly inset blocky modules for a crisp pixel-art look.",
+  "soft-square": "Uses smaller rounded squares for a softer printed feel.",
+  neon: "Adds a subtle glow around modules. Use a brighter custom module color to make it visible.",
+  "split-finders": "Uses finder color for outer corners and module color for finder centers. Set different module and finder colors to see it.",
+  sticker: "Adds a rounded sticker-style outer border around the QR.",
+};
+
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
+const DEFAULT_QUICK_CONTENT_VALUE = "example.com";
 const QUICK_CONTENT_PLACEHOLDERS: Record<QrMode, string> = {
   text: "Type plain text, notes, serial numbers, or any short message",
   url: "example.com/path or https://example.com/path",
@@ -280,7 +291,7 @@ function renderApp(): void {
               <input id="qrImport" type="file" accept="image/*" />
             </label>
           </div>
-          <textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}"></textarea>
+          <textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}">${escapeHtml(DEFAULT_QUICK_CONTENT_VALUE)}</textarea>
         </div>
         <p id="qrImportStatus" class="import-status" aria-live="polite"></p>
         <p id="autoDetectStatus" class="detect-status" aria-live="polite">Type or paste content; SayaQR detects the QR type automatically.</p>
@@ -298,7 +309,11 @@ function renderApp(): void {
         <details class="disclosure" id="customizeDetails">
           <summary>Customize</summary>
           <div class="disclosure-body design-grid">
-            <label class="field color-mode-field" for="colorMode"><span>Color</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
+            <div class="customize-group field-wide">
+              <h3>Appearance</h3>
+              <p>Pick the QR colors first. Custom colors stay local.</p>
+            </div>
+            <label class="field color-mode-field" for="colorMode"><span>Color mode</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
             <div id="customColorPanel" class="custom-color-panel" hidden>
               <label class="field design-pair color-control" for="foregroundHex">
                 <span>Modules</span>
@@ -332,26 +347,18 @@ function renderApp(): void {
               </label>
               <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
             </div>
-            <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
-            <label class="field"><span>Module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /></label>
+
+            <div class="customize-group field-wide">
+              <h3>Shape</h3>
+              <p>Classic and square scan best. Artistic modules need phone testing before print.</p>
+            </div>
             <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
             <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square" selected>Square</option><option value="rounded">Rounded</option><option value="circle">Circle</option></select></label>
-            <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
-            <details class="style-suggestions field-wide">
-              <summary>More style ideas</summary>
-              <p>These can look striking, but may scan less reliably. Keep contrast high and test before printing.</p>
-              <label class="field" for="moduleStyle"><span>Module style</span><select id="moduleStyle"><option value="classic" selected>Classic</option><option value="dots">Module dots</option><option value="pixel">Pixel blocks</option><option value="soft-square">Soft squares</option><option value="neon">Neon glow</option><option value="split-finders">Split-color finders</option><option value="sticker">Sticker border</option></select></label>
-              <div class="style-suggestion-grid" aria-label="Suggested module and finder styles">
-                <span>Module dots</span>
-                <span>Pixel blocks</span>
-                <span>Soft squares</span>
-                <span>Neon glow</span>
-                <span>Split-color finders</span>
-                <span>Sticker border</span>
-              </div>
-            </details>
-            <div class="field field-wide logo-picker">
-              <div class="logo-picker-header"><span>Center logo</span></div>
+            <label class="field field-wide" for="moduleStyle"><span>Module style</span><select id="moduleStyle"><option value="classic" selected>Classic</option><option value="dots">Module dots</option><option value="pixel">Pixel blocks</option><option value="soft-square">Soft squares</option><option value="neon">Neon glow</option><option value="split-finders">Split-color finders</option><option value="sticker">Sticker border</option></select><small id="moduleStyleHint" class="control-hint">${escapeHtml(MODULE_STYLE_HINTS.classic)}</small></label>
+
+            <details class="nested-disclosure logo-disclosure field-wide">
+              <summary>Logo</summary>
+              <div class="nested-body logo-picker">
               <div class="logo-select-row">
                 <span id="logoPresetPreview" class="logo-preset-preview" aria-hidden="true">${renderSelectedLogoPreview()}</span>
                 <label class="field logo-select-field" for="logoPresetSelect"><span>Logo preset</span><select id="logoPresetSelect" aria-label="Logo preset">${renderLogoPresetOptions()}</select></label>
@@ -369,7 +376,7 @@ function renderApp(): void {
               <div class="logo-render-options">
                 <label class="field" for="logoBackground"><span>Logo background</span><select id="logoBackground"><option value="padded" selected>Padded background</option><option value="none">No background</option></select></label>
                 <label class="switch"><input id="logoStroke" type="checkbox" /><span>Logo stroke</span></label>
-                <label class="field color-control" for="logoStrokeColorHex">
+                <label id="logoStrokeColorField" class="field color-control" for="logoStrokeColorHex" hidden>
                   <span>Stroke color</span>
                   <span class="color-shell">
                     <span class="color-swatch-wrap">
@@ -380,13 +387,21 @@ function renderApp(): void {
                   </span>
                 </label>
               </div>
-            </div>
-            <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
-            <div class="design-memory field-wide">
-              <label class="switch"><input id="rememberDesign" type="checkbox" /><span>Use this design next time</span></label>
-              <button id="resetDesign" class="secondary-action" type="button">Reset design</button>
-              <p id="designMemoryStatus" aria-live="polite"></p>
-            </div>
+              <label class="field"><span>Logo size <strong id="logoSizeValue">18%</strong></span><input id="logoScale" type="range" min="0.05" max="0.35" step="0.01" value="0.18" /></label>
+              </div>
+            </details>
+
+            <details class="nested-disclosure advanced-design field-wide">
+              <summary>Advanced scan settings</summary>
+              <div class="nested-body advanced-grid">
+                <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
+                <label class="field"><span>Export module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /><small class="control-hint">Changes downloaded image dimensions. The preview scales to fit.</small></label>
+                <label class="field design-pair"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
+                <label class="switch design-save"><input id="rememberDesign" type="checkbox" /><span>Use this design next time</span></label>
+                <button id="resetDesign" class="secondary-action reset-design-action" type="button">Reset design</button>
+                <p id="designMemoryStatus" class="design-memory-status field-wide" aria-live="polite"></p>
+              </div>
+            </details>
           </div>
         </details>
       </section>
@@ -830,6 +845,8 @@ function applyDesignPreferences(preferences: DesignPreferences): void {
   if (logoStroke) logoStroke.checked = preferences.logoStroke;
   writeColorControl("logoStrokeColor", preferences.logoStrokeColor);
   updateCustomColorPanel();
+  updateLogoStrokeColorVisibility();
+  updateModuleStyleHint();
   updateSliderLabels();
 }
 
@@ -954,6 +971,19 @@ function updateSliderLabels(): void {
   document.querySelector("#moduleSizeValue")!.textContent = moduleSize;
   document.querySelector("#roundedValue")!.textContent = `${Math.round(rounded * 100)}%`;
   document.querySelector("#logoSizeValue")!.textContent = `${Math.round(logoScale * 100)}%`;
+}
+
+function updateLogoStrokeColorVisibility(): void {
+  const stroke = document.querySelector<HTMLInputElement>("#logoStroke");
+  const strokeColor = document.querySelector<HTMLElement>("#logoStrokeColorField");
+  if (strokeColor) strokeColor.hidden = !(stroke?.checked ?? false);
+}
+
+function updateModuleStyleHint(): void {
+  const select = document.querySelector<HTMLSelectElement>("#moduleStyle");
+  const hint = document.querySelector<HTMLElement>("#moduleStyleHint");
+  const style = (select?.value ?? DEFAULT_RENDER_OPTIONS.moduleStyle) as ModuleStyle;
+  if (hint) hint.textContent = MODULE_STYLE_HINTS[style] ?? MODULE_STYLE_HINTS.classic;
 }
 
 function renderIntentPreview(preview: IntentPreview, payload: string): void {
@@ -1353,20 +1383,21 @@ async function shareCurrentImage(): Promise<void> {
   }
 }
 
-function applyShareTargetFromUrl(): void {
+function applyShareTargetFromUrl(): boolean {
   const params = new URLSearchParams(window.location.search);
   const hasShareParams = ["title", "text", "url"].some((key) => params.has(key));
-  if (!hasShareParams) return;
+  if (!hasShareParams) return false;
 
   const value = selectShareTargetValue(params);
   window.history.replaceState(null, "", removeShareTargetParams(window.location.href));
-  if (!value) return;
+  if (!value) return false;
 
   const quickContent = document.querySelector<HTMLTextAreaElement>("#autoContent");
-  if (!quickContent) return;
+  if (!quickContent) return false;
   quickContent.value = value;
   categorySelection = AUTO_CATEGORY_VALUE;
   updateFromQuickContent(value);
+  return true;
 }
 
 function setMobileExportMenu(open: boolean): void {
@@ -1708,11 +1739,13 @@ function wireEvents(): void {
 
       if (DESIGN_CONTROL_IDS.has(target.id)) {
         if (target.id === "ecc") eccChangedManually = true;
+        if (target.id === "moduleStyle") updateModuleStyleHint();
         persistDesignIfEnabled();
         if (target.id === "ecc") refreshBatchValidation();
       }
 
       const excluded = ["csvUpload", "logoUpload", "qrImport", "csvContentColumn", "csvNameColumn", "batchFormat"];
+      if (target.id === "logoStroke") updateLogoStrokeColorVisibility();
       if (!excluded.includes(target.id)) scheduleQrUpdate();
     }
   });
@@ -1874,8 +1907,13 @@ renderPayloadFields();
 restoreDesignPreferences();
 wireEvents();
 updateCustomColorPanel();
+updateLogoStrokeColorVisibility();
+updateModuleStyleHint();
 updateNativeActionVisibility();
-applyShareTargetFromUrl();
+const hasShareTargetContent = applyShareTargetFromUrl();
+if (!hasShareTargetContent) {
+  updateFromQuickContent(document.querySelector<HTMLTextAreaElement>("#autoContent")?.value ?? "");
+}
 updateQr();
 registerServiceWorker();
 

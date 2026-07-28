@@ -2,6 +2,20 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.8] - 2026-07-28
+
+### Added
+
+- Added a default `example.com` QR so new users see a working preview immediately.
+- Added plain-language module style guidance for Classic, dots, pixel, soft square, neon, split-color finder, and sticker styles.
+
+### Changed
+
+- Reorganized Customize into Appearance, Shape, Logo, and Advanced scan settings for a clearer flow.
+- Made the custom color panel a four-column desktop row with Transparent background alongside the color controls.
+- Clarified that Module size affects exported image dimensions because the preview scales to fit.
+- Placed Error correction, Use this design next time, and Reset design in the same advanced settings area.
+
 ## [1.9.7] - 2026-07-27
 
 ### Added

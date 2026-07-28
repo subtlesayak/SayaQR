@@ -24,7 +24,7 @@
   <img src="./docs/sayaqr-interface.png" alt="SayaQR interface showing a locally generated URL QR code and export controls" width="1100">
 </p>
 
-<p align="center"><sub>SayaQR v1.9.7 · content → inspect → download</sub></p>
+<p align="center"><sub>SayaQR v1.9.8 · content → inspect → download</sub></p>
 
 ## Why SayaQR
 
