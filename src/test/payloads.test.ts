@@ -112,6 +112,27 @@ describe("exports", () => {
     expect(svg).toContain('stroke="#FF00AA"');
     expect(svg).toContain('fill="none"');
   });
+
+  it("repairs blank module and finder colors at render time", () => {
+    const svg = buildQrSvg("hello", {
+      ...DEFAULT_RENDER_OPTIONS,
+      foreground: "#FFFFFF",
+      finderColor: "#FFFFFF",
+      background: "#FFFFFF",
+    });
+    expect(svg).toContain('<g fill="#0F172A"');
+    expect(svg).not.toContain('<g fill="#FFFFFF"');
+  });
+
+  it("keeps transparent white QR exports readable on white surfaces", () => {
+    const svg = buildQrSvg("hello", {
+      ...DEFAULT_RENDER_OPTIONS,
+      foreground: "#FFFFFF",
+      finderColor: "#FFFFFF",
+      transparentBackground: true,
+    });
+    expect(svg).toContain('<g fill="#0F172A"');
+  });
 });
 
 describe("scannability warnings", () => {

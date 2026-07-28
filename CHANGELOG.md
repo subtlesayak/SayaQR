@@ -16,6 +16,7 @@ All notable changes to SayaQR are documented here.
 - Made the custom color panel a four-column desktop row with Transparent background alongside the color controls.
 - Clarified that Module size affects exported image dimensions because the preview scales to fit.
 - Placed Error correction, Use this design next time, and Reset design in the same advanced settings area.
+- Protected preview and exports from blank same-color QR renders by using the nearest readable module and finder colors at render time.
 
 ## [1.9.7] - 2026-07-27
 

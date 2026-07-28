@@ -1,5 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 import { createQrCode, type ErrorCorrectionLevel, type NayukiQrCode } from "./qr";
+import { contrastRatio, hexToRgb, luminance } from "./scannability";
 
 export type FinderStyle = "square" | "rounded" | "circle";
 export type ModuleStyle = "classic" | "dots" | "pixel" | "soft-square" | "neon" | "split-finders" | "sticker";
@@ -41,6 +42,7 @@ export const DEFAULT_RENDER_OPTIONS: QrRenderOptions = {
 };
 
 const NEON_ACCENT = "#22D3EE";
+const MIN_RENDER_CONTRAST = 4.5;
 
 function escapeXml(value: string): string {
   return value
@@ -48,6 +50,22 @@ function escapeXml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function nearestReadableColor(color: string, visibleBackground: string): string {
+  if (contrastRatio(color, visibleBackground) >= MIN_RENDER_CONTRAST) return color;
+  const bg = hexToRgb(visibleBackground);
+  if (!bg) return DEFAULT_RENDER_OPTIONS.foreground;
+  return luminance(bg) > 0.45 ? "#0F172A" : "#FFFFFF";
+}
+
+function readableRenderOptions(options: QrRenderOptions): QrRenderOptions {
+  const visibleBackground = options.transparentBackground ? "#FFFFFF" : options.background;
+  return {
+    ...options,
+    foreground: nearestReadableColor(options.foreground, visibleBackground),
+    finderColor: nearestReadableColor(options.finderColor, visibleBackground),
+  };
 }
 
 function finderOrigins(size: number): Array<{ x: number; y: number }> {
@@ -112,64 +130,65 @@ function drawFinder(origin: { x: number; y: number }, margin: number, options: Q
 }
 
 export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): string {
+  const renderOptions = readableRenderOptions(options);
   const margin = Math.max(0, Math.floor(options.margin));
   const moduleSize = Math.max(1, Math.floor(options.moduleSize));
   const totalModules = qr.size + margin * 2;
   const pixelSize = totalModules * moduleSize;
-  const fg = escapeXml(options.foreground);
-  const finder = escapeXml(options.finderColor);
-  const bg = escapeXml(options.background);
+  const fg = escapeXml(renderOptions.foreground);
+  const finder = escapeXml(renderOptions.finderColor);
+  const bg = escapeXml(renderOptions.background);
   const parts: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${pixelSize}" height="${pixelSize}" viewBox="0 0 ${totalModules} ${totalModules}" role="img" aria-label="QR code">`,
   ];
 
-  if (options.moduleStyle === "neon") {
+  if (renderOptions.moduleStyle === "neon") {
     parts.push(`<defs><filter id="sayaqr-neon" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0" stdDeviation="0.18" flood-color="${NEON_ACCENT}" flood-opacity="0.8"/></filter></defs>`);
   }
 
-  if (!options.transparentBackground) {
-    const backgroundRx = options.moduleStyle === "sticker" ? Math.max(2, margin) : 0;
+  if (!renderOptions.transparentBackground) {
+    const backgroundRx = renderOptions.moduleStyle === "sticker" ? Math.max(2, margin) : 0;
     parts.push(`<rect width="100%" height="100%" fill="${bg}" rx="${backgroundRx}"/>`);
   }
 
-  if (options.moduleStyle === "sticker") {
+  if (renderOptions.moduleStyle === "sticker") {
     parts.push(`<rect x="0.5" y="0.5" width="${totalModules - 1}" height="${totalModules - 1}" rx="${Math.max(2, margin)}" fill="none" stroke="${finder}" stroke-width="1" opacity="0.45"/>`);
   }
 
-  const moduleFilter = options.moduleStyle === "neon" ? ` filter="url(#sayaqr-neon)"` : "";
+  const moduleFilter = renderOptions.moduleStyle === "neon" ? ` filter="url(#sayaqr-neon)"` : "";
   parts.push(`<g fill="${fg}" shape-rendering="geometricPrecision"${moduleFilter}>`);
   for (let y = 0; y < qr.size; y++) {
     for (let x = 0; x < qr.size; x++) {
       if (qr.getModule(x, y) && !isFinderArea(x, y, qr.size)) {
-        parts.push(moduleRect(margin + x, margin + y, options));
+        parts.push(moduleRect(margin + x, margin + y, renderOptions));
       }
     }
   }
   if (finder === fg) {
     for (const origin of finderOrigins(qr.size)) {
-      parts.push(drawFinder(origin, margin, options));
+      parts.push(drawFinder(origin, margin, renderOptions));
     }
     parts.push("</g>");
   } else {
     parts.push("</g>");
     parts.push(`<g fill="${finder}" shape-rendering="geometricPrecision">`);
     for (const origin of finderOrigins(qr.size)) {
-      parts.push(drawFinder(origin, margin, options));
+      parts.push(drawFinder(origin, margin, renderOptions));
     }
-    if (options.moduleStyle === "split-finders") {
+    if (renderOptions.moduleStyle === "split-finders") {
       parts.push("</g>");
       parts.push(`<g fill="${fg}" shape-rendering="geometricPrecision">`);
       for (const origin of finderOrigins(qr.size)) {
         const x = margin + origin.x + 2;
         const y = margin + origin.y + 2;
-        parts.push(`<rect x="${x}" y="${y}" width="3" height="3" rx="${options.finderStyle === "rounded" ? 0.35 : 0}"/>`);
+        parts.push(`<rect x="${x}" y="${y}" width="3" height="3" rx="${renderOptions.finderStyle === "rounded" ? 0.35 : 0}"/>`);
       }
     }
     parts.push("</g>");
   }
 
-  if (options.logoDataUrl) {
-    const logoSize = Math.max(1, qr.size * Math.max(0.05, Math.min(0.35, options.logoScale)));
+  if (renderOptions.logoDataUrl) {
+    const logoSize = Math.max(1, qr.size * Math.max(0.05, Math.min(0.35, renderOptions.logoScale)));
     const logoX = margin + (qr.size - logoSize) / 2;
     const logoY = margin + (qr.size - logoSize) / 2;
     const logoPadding = Math.max(0.6, logoSize * 0.08);
@@ -177,18 +196,18 @@ export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): stri
     const boxY = logoY - logoPadding;
     const boxSize = logoSize + logoPadding * 2;
     const boxRadius = Math.max(0.8, logoPadding * 1.4);
-    const backing = options.transparentBackground ? "#ffffff" : bg;
-    if (options.logoBackground !== "none") {
+    const backing = renderOptions.transparentBackground ? "#ffffff" : bg;
+    if (renderOptions.logoBackground !== "none") {
       parts.push(`<rect x="${boxX}" y="${boxY}" width="${boxSize}" height="${boxSize}" rx="${boxRadius}" fill="${backing}"/>`);
     }
-    if (options.logoStroke) {
-      const strokeX = options.logoBackground === "none" ? logoX : boxX;
-      const strokeY = options.logoBackground === "none" ? logoY : boxY;
-      const strokeSize = options.logoBackground === "none" ? logoSize : boxSize;
-      const strokeRadius = options.logoBackground === "none" ? Math.max(0.2, logoSize * 0.08) : boxRadius;
-      parts.push(`<rect x="${strokeX}" y="${strokeY}" width="${strokeSize}" height="${strokeSize}" rx="${strokeRadius}" fill="none" stroke="${escapeXml(options.logoStrokeColor)}" stroke-width="0.28"/>`);
+    if (renderOptions.logoStroke) {
+      const strokeX = renderOptions.logoBackground === "none" ? logoX : boxX;
+      const strokeY = renderOptions.logoBackground === "none" ? logoY : boxY;
+      const strokeSize = renderOptions.logoBackground === "none" ? logoSize : boxSize;
+      const strokeRadius = renderOptions.logoBackground === "none" ? Math.max(0.2, logoSize * 0.08) : boxRadius;
+      parts.push(`<rect x="${strokeX}" y="${strokeY}" width="${strokeSize}" height="${strokeSize}" rx="${strokeRadius}" fill="none" stroke="${escapeXml(renderOptions.logoStrokeColor)}" stroke-width="0.28"/>`);
     }
-    parts.push(`<image href="${escapeXml(options.logoDataUrl)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`);
+    parts.push(`<image href="${escapeXml(renderOptions.logoDataUrl)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`);
   }
 
   parts.push("</svg>");
