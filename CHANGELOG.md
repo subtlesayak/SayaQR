@@ -2,6 +2,16 @@
 
 All notable changes to SayaQR are documented here.
 
+## [1.9.9] - 2026-08-25
+
+### Changed
+
+- Made the Transparent background control lighter so it no longer competes with Color mode.
+- Renamed Export module size to Export resolution to better describe downloaded image sizing.
+- Added a compact Module style sample that visually changes with the selected style.
+- Made nested Logo and Advanced scan settings sections quieter inside Customize.
+- Reduced the desktop preview QR area height so the checkerboard does not dominate the workspace.
+
 ## [1.9.8] - 2026-07-28
 
 ### Added

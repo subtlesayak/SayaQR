@@ -56,6 +56,8 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('id="foregroundHex"');
     expect(mainSource).toContain('id="finderColorHex"');
     expect(mainSource).toContain('id="backgroundHex"');
+    expect(mainSource).toContain('id="moduleStyleSample"');
+    expect(mainSource).toContain("Export resolution");
     expect(mainSource).toContain('id="logoPresetSelect"');
     expect(mainSource).toContain('id="logoUpload"');
     expect(mainSource).toContain("registerServiceWorker();");

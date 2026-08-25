@@ -64,7 +64,7 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.8";
+const APP_VERSION = "1.9.9";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
 type ExportFormat = "png" | "svg" | "webp" | "pdf";
 
@@ -356,7 +356,7 @@ function renderApp(): void {
             </div>
             <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
             <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square" selected>Square</option><option value="rounded">Rounded</option><option value="circle">Circle</option></select></label>
-            <label class="field field-wide" for="moduleStyle"><span>Module style</span><select id="moduleStyle"><option value="classic" selected>Classic</option><option value="dots">Module dots</option><option value="pixel">Pixel blocks</option><option value="soft-square">Soft squares</option><option value="neon">Neon glow</option><option value="split-finders">Split-color finders</option><option value="sticker">Sticker border</option></select><small id="moduleStyleHint" class="control-hint">${escapeHtml(MODULE_STYLE_HINTS.classic)}</small></label>
+            <label class="field field-wide module-style-field" for="moduleStyle"><span>Module style</span><select id="moduleStyle"><option value="classic" selected>Classic</option><option value="dots">Module dots</option><option value="pixel">Pixel blocks</option><option value="soft-square">Soft squares</option><option value="neon">Neon glow</option><option value="split-finders">Split-color finders</option><option value="sticker">Sticker border</option></select><span class="module-style-support"><span id="moduleStyleSample" class="module-style-sample" data-style="classic" aria-hidden="true"><span></span><span></span><span></span><span></span></span><small id="moduleStyleHint" class="control-hint">${escapeHtml(MODULE_STYLE_HINTS.classic)}</small></span></label>
 
             <details class="nested-disclosure logo-disclosure field-wide">
               <summary>Logo</summary>
@@ -398,7 +398,7 @@ function renderApp(): void {
               <div class="nested-body advanced-grid">
                 <div class="advanced-size-row field-wide">
                   <label class="field"><span>Quiet zone <strong id="marginValue">4</strong></span><input id="margin" type="range" min="0" max="10" value="4" /></label>
-                  <label class="field"><span>Export module size <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /><small class="control-hint">Changes downloaded image dimensions. The preview scales to fit.</small></label>
+                  <label class="field"><span>Export resolution <strong id="moduleSizeValue">12</strong></span><input id="moduleSize" type="range" min="4" max="28" value="12" /><small class="control-hint">Changes downloaded image dimensions. The preview scales to fit.</small></label>
                 </div>
                 <div class="advanced-preference-row field-wide">
                   <label class="field"><span>Error correction</span><select id="ecc"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="QUARTILE">Quartile</option><option value="HIGH" selected>High</option></select></label>
@@ -988,8 +988,10 @@ function updateLogoStrokeColorVisibility(): void {
 function updateModuleStyleHint(): void {
   const select = document.querySelector<HTMLSelectElement>("#moduleStyle");
   const hint = document.querySelector<HTMLElement>("#moduleStyleHint");
+  const sample = document.querySelector<HTMLElement>("#moduleStyleSample");
   const style = (select?.value ?? DEFAULT_RENDER_OPTIONS.moduleStyle) as ModuleStyle;
   if (hint) hint.textContent = MODULE_STYLE_HINTS[style] ?? MODULE_STYLE_HINTS.classic;
+  if (sample) sample.dataset.style = style;
 }
 
 function renderIntentPreview(preview: IntentPreview, payload: string): void {

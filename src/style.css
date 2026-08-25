@@ -439,9 +439,9 @@ input[type="color"] {
 
 .appearance-options-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.4fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: end;
+  align-items: center;
 }
 
 .color-mode-field {
@@ -549,7 +549,12 @@ input[type="color"] {
 
 .color-alpha-toggle {
   align-self: end;
-  min-height: 52px;
+  min-height: 38px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  white-space: nowrap;
 }
 
 .control-hint {
@@ -558,6 +563,65 @@ input[type="color"] {
   font-size: 0.76rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.module-style-field {
+  gap: 8px;
+}
+
+.module-style-support {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.module-style-sample {
+  width: 44px;
+  height: 34px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid #d7e4ed;
+  border-radius: 6px;
+  background: #fbfcff;
+  box-shadow: inset 0 0 0 1px oklch(0 0 0 / 0.04);
+}
+
+.module-style-sample span {
+  display: block;
+  border-radius: 1px;
+  background: #0f172a;
+}
+
+.module-style-sample[data-style="dots"] span {
+  border-radius: 999px;
+  scale: 0.82;
+}
+
+.module-style-sample[data-style="pixel"] span {
+  clip-path: polygon(0 0, 82% 0, 82% 18%, 100% 18%, 100% 100%, 18% 100%, 18% 82%, 0 82%);
+}
+
+.module-style-sample[data-style="soft-square"] span,
+.module-style-sample[data-style="neon"] span {
+  border-radius: 4px;
+  scale: 0.88;
+}
+
+.module-style-sample[data-style="neon"] span {
+  background: #0f172a;
+  box-shadow: 0 0 0 1px #22d3ee, 0 0 7px rgba(34, 211, 238, 0.9);
+}
+
+.module-style-sample[data-style="split-finders"] span:nth-child(odd) {
+  background: #0f766e;
+}
+
+.module-style-sample[data-style="sticker"] {
+  border-color: #0f766e;
+  border-radius: 10px;
 }
 
 .color-shell {
@@ -798,9 +862,10 @@ input[type="file"] {
 }
 
 .nested-disclosure {
-  border: 1px solid #dce5ef;
-  border-radius: 6px;
-  background: #ffffff;
+  border: 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 0;
+  background: #fbfcff;
 }
 
 .nested-disclosure > summary {
@@ -808,7 +873,7 @@ input[type="file"] {
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding: 11px 12px;
+  padding: 11px 2px;
   color: #172033;
   font-size: 0.88rem;
   font-weight: 850;
@@ -840,7 +905,7 @@ input[type="file"] {
 .nested-body {
   display: grid;
   gap: 12px;
-  padding: 0 12px 12px;
+  padding: 2px 0 12px;
 }
 
 .advanced-grid {
@@ -984,7 +1049,7 @@ input[type="file"] {
   height: calc(100vh - 108px);
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(220px, 1fr) auto auto auto auto auto auto;
+  grid-template-rows: auto minmax(210px, 34vh) auto auto auto auto auto auto;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;
