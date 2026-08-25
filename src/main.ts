@@ -313,7 +313,10 @@ function renderApp(): void {
               <h3>Appearance</h3>
               <p>Pick the QR colors first. Custom colors stay local.</p>
             </div>
-            <label class="field color-mode-field" for="colorMode"><span>Color mode</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
+            <div class="appearance-options-row field-wide">
+              <label class="field color-mode-field" for="colorMode"><span>Color mode</span><select id="colorMode"><option value="default" selected>Default</option><option value="logo">Logo</option><option value="custom">Custom</option></select></label>
+              <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
+            </div>
             <div id="customColorPanel" class="custom-color-panel" hidden>
               <label class="field design-pair color-control" for="foregroundHex">
                 <span>Modules</span>
@@ -345,7 +348,6 @@ function renderApp(): void {
                   <input id="backgroundHex" class="hex-color-input" type="text" value="${DEFAULT_RENDER_OPTIONS.background}" inputmode="text" spellcheck="false" aria-label="Background hex color" />
                 </span>
               </label>
-              <label class="switch color-alpha-toggle"><input id="transparentBackground" type="checkbox" /><span>Transparent background</span></label>
             </div>
 
             <div class="customize-group field-wide">
@@ -937,7 +939,7 @@ function getRenderOptions(): QrRenderOptions {
     ? readColorControl("finderColor", foreground)
     : foreground;
   const background = useCustomColors ? readColorControl("background", DEFAULT_RENDER_OPTIONS.background) : DEFAULT_RENDER_OPTIONS.background;
-  const transparentBackground = useCustomColors ? (document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false) : false;
+  const transparentBackground = document.querySelector<HTMLInputElement>("#transparentBackground")?.checked ?? false;
   const margin = Number(document.querySelector<HTMLInputElement>("#margin")?.value ?? DEFAULT_RENDER_OPTIONS.margin);
   const moduleSize = Number(document.querySelector<HTMLInputElement>("#moduleSize")?.value ?? DEFAULT_RENDER_OPTIONS.moduleSize);
   const rounded = Number(document.querySelector<HTMLInputElement>("#rounded")?.value ?? DEFAULT_RENDER_OPTIONS.rounded);

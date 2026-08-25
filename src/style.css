@@ -432,14 +432,25 @@ input[type="color"] {
   background: #fbfcff;
 }
 
-.color-mode-field,
+.appearance-options-row,
 .custom-color-panel {
   grid-column: 1 / -1;
 }
 
+.appearance-options-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.4fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.color-mode-field {
+  min-width: 0;
+}
+
 .custom-color-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 12px;
   border: 1px solid #d7efe8;
@@ -1955,6 +1966,10 @@ summary {
   }
 
   .custom-color-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .appearance-options-row {
     grid-template-columns: 1fr;
   }
 
