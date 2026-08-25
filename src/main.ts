@@ -80,10 +80,12 @@ const MODULE_STYLE_HINTS: Record<ModuleStyle, string> = {
   dots: "Turns data modules into dots while keeping finder corners clear.",
   pixel: "Slightly inset blocky modules for a crisp pixel-art look.",
   "soft-square": "Uses smaller rounded squares for a softer printed feel.",
-  neon: "Adds a cyan glow and accent stroke around modules so the style is visibly different.",
+  neon: "Adds a visible cyan accent around modules while keeping the dark QR readable.",
   "split-finders": "Uses finder color for outer corners and module color for finder centers. Set different module and finder colors to see it.",
-  sticker: "Adds a rounded sticker-style outer border around the QR.",
+  sticker: "Adds a rounded sticker-style outer border. Change finder color to customize the border.",
 };
+
+const COLOR_DEPENDENT_MODULE_STYLES = new Set<ModuleStyle>(["split-finders", "sticker"]);
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
 const DEFAULT_QUICK_CONTENT_VALUE = "example.com";
@@ -352,11 +354,11 @@ function renderApp(): void {
 
             <div class="customize-group field-wide">
               <h3>Shape</h3>
-              <p>Classic and square scan best. Artistic modules need phone testing before print.</p>
+              <p>Decorative styles may scan less reliably. Test before printing.</p>
             </div>
             <label class="field"><span>Rounded modules <strong id="roundedValue">12%</strong></span><input id="rounded" type="range" min="0" max="1" step="0.05" value="0.12" /></label>
             <label class="field design-pair"><span>Finder style</span><select id="finderStyle"><option value="square" selected>Square</option><option value="rounded">Rounded</option><option value="circle">Circle</option></select></label>
-            <label class="field field-wide module-style-field" for="moduleStyle"><span>Module style</span><select id="moduleStyle"><option value="classic" selected>Classic</option><option value="dots">Module dots</option><option value="pixel">Pixel blocks</option><option value="soft-square">Soft squares</option><option value="neon">Neon glow</option><option value="split-finders">Split-color finders</option><option value="sticker">Sticker border</option></select><span class="module-style-support"><span id="moduleStyleSample" class="module-style-sample" data-style="classic" aria-hidden="true"><span></span><span></span><span></span><span></span></span><small id="moduleStyleHint" class="control-hint">${escapeHtml(MODULE_STYLE_HINTS.classic)}</small></span></label>
+            <label class="field field-wide module-style-field" for="moduleStyle"><span>Decorative style</span><select id="moduleStyle"><option value="classic" selected>Classic</option><option value="dots">Module dots</option><option value="pixel">Pixel blocks</option><option value="soft-square">Soft squares</option><option value="neon">Neon glow</option><option value="split-finders">Split-color finders</option><option value="sticker">Sticker border</option></select><span class="module-style-support"><span id="moduleStyleSample" class="module-style-sample" data-style="classic" aria-hidden="true"><span></span><span></span><span></span><span></span></span><small id="moduleStyleHint" class="control-hint">${escapeHtml(MODULE_STYLE_HINTS.classic)}</small><button id="customizeStyleColors" class="inline-link-button" type="button" hidden>Customize colors</button></span></label>
 
             <details class="nested-disclosure logo-disclosure field-wide">
               <summary>Logo</summary>
@@ -989,9 +991,12 @@ function updateModuleStyleHint(): void {
   const select = document.querySelector<HTMLSelectElement>("#moduleStyle");
   const hint = document.querySelector<HTMLElement>("#moduleStyleHint");
   const sample = document.querySelector<HTMLElement>("#moduleStyleSample");
+  const colorButton = document.querySelector<HTMLButtonElement>("#customizeStyleColors");
+  const colorMode = document.querySelector<HTMLSelectElement>("#colorMode")?.value ?? "default";
   const style = (select?.value ?? DEFAULT_RENDER_OPTIONS.moduleStyle) as ModuleStyle;
   if (hint) hint.textContent = MODULE_STYLE_HINTS[style] ?? MODULE_STYLE_HINTS.classic;
   if (sample) sample.dataset.style = style;
+  if (colorButton) colorButton.hidden = !COLOR_DEPENDENT_MODULE_STYLES.has(style) || colorMode === "custom";
 }
 
 function renderIntentPreview(preview: IntentPreview, payload: string): void {
@@ -1715,6 +1720,7 @@ function wireEvents(): void {
 
       if (target.id === "colorMode") {
         updateCustomColorPanel();
+        updateModuleStyleHint();
         scheduleQrUpdate();
         persistDesignIfEnabled();
         return;
@@ -1769,6 +1775,16 @@ function wireEvents(): void {
       applyLogoPreset(preset.id, false);
       scheduleQrUpdate();
     }
+  });
+
+  document.querySelector<HTMLButtonElement>("#customizeStyleColors")?.addEventListener("click", () => {
+    const colorMode = document.querySelector<HTMLSelectElement>("#colorMode");
+    if (colorMode) colorMode.value = "custom";
+    updateCustomColorPanel();
+    updateModuleStyleHint();
+    document.querySelector<HTMLInputElement>("#foregroundHex")?.focus();
+    scheduleQrUpdate();
+    persistDesignIfEnabled();
   });
 
   document.querySelector<HTMLInputElement>("#logoUpload")?.addEventListener("change", async (event) => {

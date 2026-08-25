@@ -57,6 +57,9 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('id="finderColorHex"');
     expect(mainSource).toContain('id="backgroundHex"');
     expect(mainSource).toContain('id="moduleStyleSample"');
+    expect(mainSource).toContain("Decorative style");
+    expect(mainSource).toContain('id="customizeStyleColors"');
+    expect(mainSource).toContain("Decorative styles may scan less reliably. Test before printing.");
     expect(mainSource).toContain("Export resolution");
     expect(mainSource).toContain('id="logoPresetSelect"');
     expect(mainSource).toContain('id="logoUpload"');

@@ -91,6 +91,16 @@ describe("exports", () => {
     expect(svg).toContain(expected);
   });
 
+  it("renders neon without filter-dependent blanking", () => {
+    const svg = buildQrSvg("hello", {
+      ...DEFAULT_RENDER_OPTIONS,
+      moduleStyle: "neon",
+    });
+    expect(svg).toContain('stroke="#22D3EE"');
+    expect(svg).not.toContain("filter=");
+    expect(svg).not.toContain("<filter");
+  });
+
   it("can render an uploaded logo without a background", () => {
     const svg = buildQrSvg("hello", {
       ...DEFAULT_RENDER_OPTIONS,

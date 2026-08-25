@@ -142,10 +142,6 @@ export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): stri
     `<svg xmlns="http://www.w3.org/2000/svg" width="${pixelSize}" height="${pixelSize}" viewBox="0 0 ${totalModules} ${totalModules}" role="img" aria-label="QR code">`,
   ];
 
-  if (renderOptions.moduleStyle === "neon") {
-    parts.push(`<defs><filter id="sayaqr-neon" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0" stdDeviation="0.18" flood-color="${NEON_ACCENT}" flood-opacity="0.8"/></filter></defs>`);
-  }
-
   if (!renderOptions.transparentBackground) {
     const backgroundRx = renderOptions.moduleStyle === "sticker" ? Math.max(2, margin) : 0;
     parts.push(`<rect width="100%" height="100%" fill="${bg}" rx="${backgroundRx}"/>`);
@@ -155,8 +151,7 @@ export function buildSvgFromQr(qr: NayukiQrCode, options: QrRenderOptions): stri
     parts.push(`<rect x="0.5" y="0.5" width="${totalModules - 1}" height="${totalModules - 1}" rx="${Math.max(2, margin)}" fill="none" stroke="${finder}" stroke-width="1" opacity="0.45"/>`);
   }
 
-  const moduleFilter = renderOptions.moduleStyle === "neon" ? ` filter="url(#sayaqr-neon)"` : "";
-  parts.push(`<g fill="${fg}" shape-rendering="geometricPrecision"${moduleFilter}>`);
+  parts.push(`<g fill="${fg}" shape-rendering="geometricPrecision">`);
   for (let y = 0; y < qr.size; y++) {
     for (let x = 0; x < qr.size; x++) {
       if (qr.getModule(x, y) && !isFinderArea(x, y, qr.size)) {

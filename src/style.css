@@ -565,6 +565,27 @@ input[type="color"] {
   line-height: 1.35;
 }
 
+.inline-link-button {
+  width: fit-content;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #00796f;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  box-shadow: none;
+}
+
+.inline-link-button:hover {
+  background: transparent;
+  color: #005f58;
+  box-shadow: none;
+}
+
 .module-style-field {
   gap: 8px;
 }
