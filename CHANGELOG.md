@@ -2,6 +2,20 @@
 
 All notable changes to SayaQR are documented here.
 
+## [2.0.0] - 2026-09-16
+
+### Added
+
+- Added 3D-printable QR coaster exports generated fully in the browser.
+- Added STL export for broad slicer compatibility as single-material coaster geometry.
+- Added 3MF export with selected module, finder, and base colors preserved as material metadata.
+- Added Blender-ready OBJ export as a ZIP containing `.obj` and `.mtl` files.
+- Added batch ZIP support for STL, 3MF, and OBJ coaster formats.
+
+### Changed
+
+- Expanded export guidance to explain 2D image formats and 3D coaster formats separately.
+
 ## [1.9.9] - 2026-08-25
 
 ### Changed

@@ -24,7 +24,7 @@
   <img src="./docs/sayaqr-interface.png" alt="SayaQR interface showing a locally generated URL QR code and export controls" width="1100">
 </p>
 
-<p align="center"><sub>SayaQR v1.9.9 · content → inspect → download</sub></p>
+<p align="center"><sub>SayaQR v2.0.0 · content → inspect → download</sub></p>
 
 ## Why SayaQR
 
@@ -58,7 +58,7 @@
 | **Intent-aware input** | Automatic type detection, structured field editing, human-readable previews, and content-aware filenames. |
 | **Design controls** | Independent module, finder, and background colors, transparency, quiet zone, module size, rounded modules, finder style, center logos with optional backing/stroke, and collapsed advanced module styles. |
 | **Scan safety** | Contrast, quiet-zone, logo-size, and payload-density warnings plus local blur, size, contrast, and rotation simulations. |
-| **Flexible output** | Inline PNG, SVG, WebP, and WYSIWYG PDF downloads; image copy and native sharing when supported. |
+| **Flexible output** | Inline PNG, SVG, WebP, WYSIWYG PDF, STL, 3MF, and OBJ coaster downloads; image copy and native sharing when supported. |
 | **Local QR import** | Decode QR screenshots through file selection, drag and drop, or paste without uploading the image. |
 | **Batch generation** | CSV/TXT drag and drop, column suggestions, validation, deterministic filenames, cancellation, ZIP export, and error reports. |
 | **Opt-in design memory** | Save visual preferences under `sayaqr:design:v1`; content and uploaded files are never persisted. |
@@ -87,10 +87,15 @@ There is no analytics, advertising, account system, cloud storage, URL shortener
 | **SVG** | Design tools and scalable printing |
 | **WebP** | Compact web images |
 | **PDF** | Print-ready output |
+| **STL** | Single-material 3D-printable QR coaster geometry |
+| **3MF** | Color/material-aware 3D-printable QR coaster |
+| **OBJ** | Blender import with a companion MTL material file |
 
-SVG, PNG, WebP, PDF, clipboard copy, and native sharing all use the styled preview SVG as their canonical source. Colors, background, rounded modules, finder style, center logo, logo backing, quiet zone, and proportions stay consistent across formats.
+SVG, PNG, WebP, PDF, clipboard copy, and native sharing all use the styled preview SVG as their canonical source. Colors, background, rounded modules, finder style, center logo, logo backing, quiet zone, and proportions stay consistent across those 2D formats.
 
 PDF export embeds a lossless PNG at a minimum of 1600 × 1600 pixels. Transparent backgrounds become white for PDF because printed paper has a background.
+
+3D exports generate a 100 mm square cup-coaster model locally from the same QR payload and error-correction level. STL is geometry-only for broad slicer compatibility. 3MF preserves the selected module, finder, and base colors as material metadata. OBJ downloads as a ZIP containing `.obj` and `.mtl` files for Blender and other 3D tools.
 
 Copy and Share appear only when the browser supports those capabilities. Installed PWAs can receive shared URLs or text; incoming share parameters are auto-detected locally and removed from browser history immediately.
 

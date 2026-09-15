@@ -29,10 +29,14 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('data-export="svg"');
     expect(mainSource).toContain('data-export="webp"');
     expect(mainSource).toContain('data-export="pdf"');
+    expect(mainSource).toContain('data-export="stl"');
+    expect(mainSource).toContain('data-export="3mf"');
+    expect(mainSource).toContain('data-export="obj"');
     expect(mainSource).not.toContain("<summary>More formats</summary>");
     expect(mainSource.indexOf('id="scanTestDetails"')).toBeLessThan(mainSource.indexOf('id="formatGuidance"'));
     expect(mainSource.indexOf('id="formatGuidance"')).toBeLessThan(mainSource.indexOf('class="format-action-row"'));
     expect(formatRow.indexOf("<span>Download PNG</span>")).toBeLessThan(formatRow.indexOf('data-export="svg"'));
+    expect(formatRow.indexOf('data-export="stl"')).toBeLessThan(formatRow.indexOf('data-export="obj"'));
     expect(mainSource.indexOf('data-export="pdf"')).toBeLessThan(mainSource.indexOf('id="nativeExportActions"'));
     expect(mainSource.indexOf('id="copyImage"')).toBeLessThan(mainSource.indexOf('id="shareImage"'));
     expect(mainSource).toContain('data-count="0" hidden');

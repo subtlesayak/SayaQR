@@ -1,7 +1,7 @@
 import { suggestExportName } from "./export-name";
 import type { PayloadFields, QrMode } from "./payloads";
 
-export type ExportExtension = "svg" | "png" | "webp" | "pdf";
+export type ExportExtension = "svg" | "png" | "webp" | "pdf" | "stl" | "3mf" | "obj";
 
 export function selectShareTargetValue(params: URLSearchParams): string {
   return params.get("url")?.trim()

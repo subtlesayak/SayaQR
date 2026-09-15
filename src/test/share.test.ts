@@ -23,6 +23,9 @@ describe("export and native-share helpers", () => {
   it("builds content-aware filenames with the requested extension", () => {
     expect(exportFilename("url", { url: "https://www.example.com/path" }, "png")).toBe("example-com-qr.png");
     expect(exportFilename("wifi", { ssid: "Cafe Guest" }, "pdf")).toBe("cafe-guest-wifi-qr.pdf");
+    expect(exportFilename("url", { url: "https://www.example.com/path" }, "stl")).toBe("example-com-qr.stl");
+    expect(exportFilename("url", { url: "https://www.example.com/path" }, "3mf")).toBe("example-com-qr.3mf");
+    expect(exportFilename("url", { url: "https://www.example.com/path" }, "obj")).toBe("example-com-qr.obj");
   });
 
   it("classifies only AbortError as user cancellation", () => {

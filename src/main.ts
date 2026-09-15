@@ -51,6 +51,7 @@ import {
   type ModuleStyle,
   type QrRenderOptions,
 } from "./lib/render";
+import { objZipBlob, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob } from "./lib/model3d";
 import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
@@ -64,15 +65,18 @@ type FieldConfig = {
 };
 
 const AUTO_CATEGORY_VALUE = "auto";
-const APP_VERSION = "1.9.9";
+const APP_VERSION = "2.0.0";
 type CategorySelection = QrMode | typeof AUTO_CATEGORY_VALUE;
-type ExportFormat = "png" | "svg" | "webp" | "pdf";
+type ExportFormat = "png" | "svg" | "webp" | "pdf" | "stl" | "3mf" | "obj";
 
 const EXPORT_FORMAT_GUIDANCE: Record<ExportFormat, string> = {
   png: "Recommended for everyday use",
   svg: "Best for design and scalable printing",
   webp: "Compact web image",
   pdf: "Print-ready; transparent backgrounds become white",
+  stl: "Print-ready coaster geometry; STL is single-material",
+  "3mf": "Print-ready coaster model with selected colors",
+  obj: "Blender-ready coaster ZIP with OBJ and color MTL",
 };
 
 const MODULE_STYLE_HINTS: Record<ModuleStyle, string> = {
@@ -273,6 +277,9 @@ function renderApp(): void {
             <button type="button" data-export="svg" role="menuitem" disabled>SVG</button>
             <button type="button" data-export="webp" role="menuitem" disabled>WebP</button>
             <button type="button" data-export="pdf" role="menuitem" disabled>PDF</button>
+            <button type="button" data-export="stl" role="menuitem" disabled>STL</button>
+            <button type="button" data-export="3mf" role="menuitem" disabled>3MF</button>
+            <button type="button" data-export="obj" role="menuitem" disabled>OBJ</button>
           </div>
         </div>
       </div>
@@ -433,7 +440,7 @@ function renderApp(): void {
             </label>
             <label class="field"><span>Content column</span><select id="csvContentColumn" disabled></select></label>
             <label class="field"><span>Filename column</span><select id="csvNameColumn" disabled></select></label>
-            <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select></label>
+            <label class="field"><span>ZIP format</span><select id="batchFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="webp">WebP</option><option value="pdf">PDF</option><option value="stl">STL coaster</option><option value="3mf">3MF color coaster</option><option value="obj">OBJ Blender coaster</option></select></label>
             <button id="exportZip" type="button" disabled>Export ZIP</button>
           </div>
           <div id="batchProgress" class="batch-progress" hidden>
@@ -490,6 +497,9 @@ function renderApp(): void {
               <button type="button" data-export="svg" aria-describedby="formatGuidance" disabled>SVG</button>
               <button type="button" data-export="webp" aria-describedby="formatGuidance" disabled>WebP</button>
               <button type="button" data-export="pdf" aria-describedby="formatGuidance" disabled>PDF</button>
+              <button type="button" data-export="stl" aria-describedby="formatGuidance" disabled>STL</button>
+              <button type="button" data-export="3mf" aria-describedby="formatGuidance" disabled>3MF</button>
+              <button type="button" data-export="obj" aria-describedby="formatGuidance" disabled>OBJ</button>
             </div>
           </div>
           <div id="nativeExportActions" class="secondary-export-actions" data-count="0" hidden>
@@ -1319,11 +1329,19 @@ async function exportCurrent(format: string): Promise<void> {
   if (status) status.textContent = "Preparing " + format.toUpperCase() + "...";
 
   try {
+    const renderOptions = getRenderOptions();
+    let downloadedFilename = filename;
     if (format === "svg") downloadBlob(svgBlob(currentSvg), filename);
     if (format === "png") downloadBlob(await svgToRasterBlob(currentSvg, "image/png"), filename);
     if (format === "webp") downloadBlob(await svgToRasterBlob(currentSvg, "image/webp"), filename);
     if (format === "pdf") downloadBlob(await svgToPdfBlob(currentSvg), filename);
-    if (status) status.textContent = "Downloaded " + filename + ".";
+    if (format === "stl") downloadBlob(stlBlob(createQrCode(currentPayload, renderOptions.ecc), qr3dOptionsFromRenderOptions(renderOptions)), filename);
+    if (format === "3mf") downloadBlob(await threeMfBlob(createQrCode(currentPayload, renderOptions.ecc), qr3dOptionsFromRenderOptions(renderOptions)), filename);
+    if (format === "obj") {
+      downloadedFilename = filename.replace(/\.obj$/i, "-obj.zip");
+      downloadBlob(await objZipBlob(createQrCode(currentPayload, renderOptions.ecc), qr3dOptionsFromRenderOptions(renderOptions)), downloadedFilename);
+    }
+    if (status) status.textContent = "Downloaded " + downloadedFilename + ".";
   } catch {
     if (status) status.textContent = "Export failed. Try another format.";
   }
@@ -1581,11 +1599,19 @@ async function exportBatchZip(): Promise<void> {
         skipped += 1;
       } else {
         try {
-          const svg = buildSvgFromQr(createQrCode(row.payload, options.ecc), options);
+          const qr = createQrCode(row.payload, options.ecc);
+          const svg = buildSvgFromQr(qr, options);
           if (format === "svg") {
             files.push({ name: `${row.outputFilename}.svg`, data: svg });
           } else if (format === "pdf") {
             files.push({ name: `${row.outputFilename}.pdf`, data: await svgToPdfBlob(svg) });
+          } else if (format === "stl") {
+            files.push({ name: `${row.outputFilename}.stl`, data: stlBlob(qr, qr3dOptionsFromRenderOptions(options)) });
+          } else if (format === "3mf") {
+            files.push({ name: `${row.outputFilename}.3mf`, data: await threeMfBlob(qr, qr3dOptionsFromRenderOptions(options)) });
+          } else if (format === "obj") {
+            const bundle = await objZipBlob(qr, qr3dOptionsFromRenderOptions(options));
+            files.push({ name: `${row.outputFilename}-obj.zip`, data: bundle });
           } else {
             const mime = format === "webp" ? "image/webp" : "image/png";
             files.push({ name: `${row.outputFilename}.${format}`, data: await svgToRasterBlob(svg, mime) });
