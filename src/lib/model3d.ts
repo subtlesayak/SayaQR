@@ -109,6 +109,10 @@ function addBox(
   );
 }
 
+function addQuad(triangles: Triangle[], a: Vertex, b: Vertex, c: Vertex, d: Vertex, material: MaterialIndex): void {
+  triangles.push({ a, b, c, material }, { a, b: c, c: d, material });
+}
+
 function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): Triangle[] {
   const quietZone = Math.max(0, Math.floor(optionValue(inputOptions, "quietZone")));
   const sizeMm = Math.max(30, optionValue(inputOptions, "sizeMm"));
@@ -120,30 +124,66 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
 
   addBox(triangles, origin, origin, 0, sizeMm, sizeMm, baseHeight, 0);
 
-  for (let y = 0; y < qr.size; y++) {
-    let runStart = -1;
-    let runMaterial: MaterialIndex = 1;
+  function cellMaterial(x: number, y: number): MaterialIndex | null {
+    if (x < 0 || y < 0 || x >= qr.size || y >= qr.size || !qr.getModule(x, y)) return null;
+    return isFinderArea(x, y, qr.size) ? 2 : 1;
+  }
 
-    for (let x = 0; x <= qr.size; x++) {
-      const filled = x < qr.size && qr.getModule(x, y);
-      const material: MaterialIndex = x < qr.size && isFinderArea(x, y, qr.size) ? 2 : 1;
-      const shouldFlush = runStart >= 0 && (!filled || material !== runMaterial);
-      if (shouldFlush) {
-        addBox(
-          triangles,
-          origin + (quietZone + runStart) * cellSize,
-          origin + (quietZone + y) * cellSize,
-          baseHeight,
-          (x - runStart) * cellSize,
-          cellSize,
-          moduleHeight,
-          runMaterial,
-        );
-        runStart = -1;
+  for (const material of [1, 2] as const) {
+    for (let y = 0; y < qr.size; y++) {
+      let runStart = -1;
+
+      for (let x = 0; x <= qr.size; x++) {
+        const matches = x < qr.size && cellMaterial(x, y) === material;
+        if (runStart >= 0 && !matches) {
+          const x1 = origin + (quietZone + runStart) * cellSize;
+          const x2 = origin + (quietZone + x) * cellSize;
+          const y1 = origin + (quietZone + y) * cellSize;
+          const y2 = y1 + cellSize;
+          addQuad(
+            triangles,
+            { x: x1, y: y1, z: baseHeight + moduleHeight },
+            { x: x2, y: y1, z: baseHeight + moduleHeight },
+            { x: x2, y: y2, z: baseHeight + moduleHeight },
+            { x: x1, y: y2, z: baseHeight + moduleHeight },
+            material,
+          );
+          addQuad(
+            triangles,
+            { x: x1, y: y2, z: baseHeight },
+            { x: x2, y: y2, z: baseHeight },
+            { x: x2, y: y1, z: baseHeight },
+            { x: x1, y: y1, z: baseHeight },
+            material,
+          );
+          runStart = -1;
+        }
+        if (matches && runStart < 0) runStart = x;
       }
-      if (filled && runStart < 0) {
-        runStart = x;
-        runMaterial = material;
+    }
+
+    for (let y = 0; y < qr.size; y++) {
+      for (let x = 0; x < qr.size; x++) {
+        if (cellMaterial(x, y) !== material) continue;
+        const x1 = origin + (quietZone + x) * cellSize;
+        const x2 = x1 + cellSize;
+        const y1 = origin + (quietZone + y) * cellSize;
+        const y2 = y1 + cellSize;
+        const z1 = baseHeight;
+        const z2 = baseHeight + moduleHeight;
+
+        if (cellMaterial(x, y - 1) !== material) {
+          addQuad(triangles, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, { x: x1, y: y1, z: z2 }, { x: x2, y: y1, z: z2 }, material);
+        }
+        if (cellMaterial(x + 1, y) !== material) {
+          addQuad(triangles, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x2, y: y1, z: z2 }, { x: x2, y: y2, z: z2 }, material);
+        }
+        if (cellMaterial(x, y + 1) !== material) {
+          addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y2, z: z2 }, { x: x1, y: y2, z: z2 }, material);
+        }
+        if (cellMaterial(x - 1, y) !== material) {
+          addQuad(triangles, { x: x1, y: y1, z: z1 }, { x: x1, y: y2, z: z1 }, { x: x1, y: y2, z: z2 }, { x: x1, y: y1, z: z2 }, material);
+        }
       }
     }
   }
@@ -208,6 +248,7 @@ export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materi
   const faces: string[] = [];
   const materialNames = ["base", "modules", "finders"];
   let activeMaterial = "";
+  let activeGroup = "";
 
   for (const triangle of triangles) {
     const start = vertices.length + 1;
@@ -217,6 +258,10 @@ export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materi
       `v ${number(triangle.c.x)} ${number(triangle.c.y)} ${number(triangle.c.z)}`,
     );
     const material = materialNames[triangle.material];
+    if (activeGroup !== material) {
+      faces.push(`g ${material}`);
+      activeGroup = material;
+    }
     if (activeMaterial !== material) {
       faces.push(`usemtl ${material}`);
       activeMaterial = material;
@@ -263,29 +308,45 @@ export async function objZipBlob(qr: NayukiQrCode, options: Qr3dModelOptions = {
 
 function build3mfModel(qr: NayukiQrCode, options: Qr3dModelOptions): string {
   const triangles = modelTriangles(qr, options);
-  const vertices: string[] = [];
-  const triangleXml: string[] = [];
-  const vertexKeys = new Map<string, number>();
+  const partNames = ["Coaster base", "QR modules", "Finder modules"];
   const colors = [
     normalizeColor(optionValue(options, "baseColor")),
     normalizeColor(optionValue(options, "moduleColor")),
     normalizeColor(optionValue(options, "finderColor")),
   ];
 
-  function vertexIndex(vertex: Vertex): number {
-    const key = `${number(vertex.x)},${number(vertex.y)},${number(vertex.z)}`;
-    const existing = vertexKeys.get(key);
-    if (existing !== undefined) return existing;
-    const index = vertices.length;
-    vertexKeys.set(key, index);
-    vertices.push(`<vertex x="${number(vertex.x)}" y="${number(vertex.y)}" z="${number(vertex.z)}"/>`);
-    return index;
-  }
+  function objectXml(material: MaterialIndex): string {
+    const vertices: string[] = [];
+    const triangleXml: string[] = [];
+    const vertexKeys = new Map<string, number>();
 
-  for (const triangle of triangles) {
-    triangleXml.push(
-      `<triangle v1="${vertexIndex(triangle.a)}" v2="${vertexIndex(triangle.b)}" v3="${vertexIndex(triangle.c)}" pid="1" p1="${triangle.material}"/>`,
-    );
+    function vertexIndex(vertex: Vertex): number {
+      const key = `${number(vertex.x)},${number(vertex.y)},${number(vertex.z)}`;
+      const existing = vertexKeys.get(key);
+      if (existing !== undefined) return existing;
+      const index = vertices.length;
+      vertexKeys.set(key, index);
+      vertices.push(`<vertex x="${number(vertex.x)}" y="${number(vertex.y)}" z="${number(vertex.z)}"/>`);
+      return index;
+    }
+
+    for (const triangle of triangles) {
+      if (triangle.material !== material) continue;
+      triangleXml.push(
+        `<triangle v1="${vertexIndex(triangle.a)}" v2="${vertexIndex(triangle.b)}" v3="${vertexIndex(triangle.c)}" pid="1" p1="${material}" p2="${material}" p3="${material}"/>`,
+      );
+    }
+
+    return `<object id="${material + 2}" type="model" name="${escapeXml(partNames[material])}">
+      <mesh>
+        <vertices>
+          ${vertices.join("\n          ")}
+        </vertices>
+        <triangles>
+          ${triangleXml.join("\n          ")}
+        </triangles>
+      </mesh>
+    </object>`;
   }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -298,19 +359,14 @@ function build3mfModel(qr: NayukiQrCode, options: Qr3dModelOptions): string {
       <base name="QR modules" displaycolor="${escapeXml(colors[1])}"/>
       <base name="Finder modules" displaycolor="${escapeXml(colors[2])}"/>
     </basematerials>
-    <object id="2" type="model">
-      <mesh>
-        <vertices>
-          ${vertices.join("\n          ")}
-        </vertices>
-        <triangles>
-          ${triangleXml.join("\n          ")}
-        </triangles>
-      </mesh>
-    </object>
+    ${objectXml(0)}
+    ${objectXml(1)}
+    ${objectXml(2)}
   </resources>
   <build>
     <item objectid="2"/>
+    <item objectid="3"/>
+    <item objectid="4"/>
   </build>
 </model>`;
 }

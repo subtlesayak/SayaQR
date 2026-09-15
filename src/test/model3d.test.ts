@@ -49,6 +49,11 @@ describe("3D QR exports", () => {
     expect(text).toContain("3D/3dmodel.model");
     expect(text).toContain("displaycolor=\"#123456\"");
     expect(text).toContain("displaycolor=\"#654321\"");
+    expect(text).toContain("name=\"Coaster base\"");
+    expect(text).toContain("name=\"QR modules\"");
+    expect(text).toContain("name=\"Finder modules\"");
+    expect(text).toContain('p1="1" p2="1" p3="1"');
+    expect(text).toContain('<item objectid="4"/>');
     expect(text).toContain("unit=\"millimeter\"");
   });
 
@@ -60,6 +65,8 @@ describe("3D QR exports", () => {
     const zipText = new TextDecoder().decode(new Uint8Array(await zip.arrayBuffer()));
 
     expect(obj).toContain("mtllib test.mtl");
+    expect(obj).toContain("g modules");
+    expect(obj).toContain("g finders");
     expect(obj).toContain("usemtl modules");
     expect(obj).toContain("f ");
     expect(mtl).toContain("newmtl modules");
