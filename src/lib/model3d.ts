@@ -12,6 +12,18 @@ export interface Qr3dModelOptions {
   baseColor?: string;
 }
 
+export const COASTER_SIZE_PRESETS = [
+  { value: 90, label: "90 mm · compact" },
+  { value: 95, label: "95 mm · standard" },
+  { value: 100, label: "100 mm · cup coaster" },
+  { value: 105, label: "105 mm · generous" },
+] as const;
+
+export interface Qr3dPrintabilityWarning {
+  level: "info" | "warning";
+  message: string;
+}
+
 interface Vertex {
   x: number;
   y: number;
@@ -36,6 +48,23 @@ const DEFAULT_3D_OPTIONS = {
   finderColor: "#0F172A",
   baseColor: "#FFFFFF",
 } satisfies Required<Qr3dModelOptions>;
+
+export function qr3dCellSizeMm(qr: NayukiQrCode, options: Qr3dModelOptions = {}): number {
+  const quietZone = Math.max(0, Math.floor(optionValue(options, "quietZone")));
+  const sizeMm = Math.max(30, optionValue(options, "sizeMm"));
+  return sizeMm / (qr.size + quietZone * 2);
+}
+
+export function getQr3dPrintabilityWarnings(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Qr3dPrintabilityWarning[] {
+  const cellSize = qr3dCellSizeMm(qr, options);
+  const moduleHeight = Math.max(0.4, optionValue(options, "moduleHeightMm"));
+  const warnings: Qr3dPrintabilityWarning[] = [];
+  if (cellSize < 1.2) warnings.push({ level: "warning", message: `Small QR cells (${cellSize.toFixed(2)} mm). Use 100 mm or larger for easier printing.` });
+  else if (cellSize < 1.5) warnings.push({ level: "warning", message: `Fine QR cells (${cellSize.toFixed(2)} mm). A 0.4 mm nozzle may soften detail.` });
+  if (moduleHeight < 0.6) warnings.push({ level: "warning", message: "Raised height below 0.6 mm may disappear on the first layers." });
+  warnings.push({ level: "info", message: "STL is single-material; use 3MF for Bambu material assignment or OBJ for Blender." });
+  return warnings;
+}
 
 function optionValue<T extends keyof typeof DEFAULT_3D_OPTIONS>(options: Qr3dModelOptions, key: T): (typeof DEFAULT_3D_OPTIONS)[T] {
   return (options[key] ?? DEFAULT_3D_OPTIONS[key]) as (typeof DEFAULT_3D_OPTIONS)[T];
@@ -69,44 +98,25 @@ function isFinderArea(x: number, y: number, size: number): boolean {
   return (x < 7 && y < 7) || (x >= size - 7 && y < 7) || (x < 7 && y >= size - 7);
 }
 
-function addBox(
-  triangles: Triangle[],
-  x: number,
-  y: number,
-  z: number,
-  width: number,
-  depth: number,
-  height: number,
-  material: MaterialIndex,
-): void {
-  const x2 = x + width;
-  const y2 = y + depth;
-  const z2 = z + height;
-  const v = {
-    nwb: { x, y, z },
-    neb: { x: x2, y, z },
-    seb: { x: x2, y: y2, z },
-    swb: { x, y: y2, z },
-    nwt: { x, y, z: z2 },
-    net: { x: x2, y, z: z2 },
-    set: { x: x2, y: y2, z: z2 },
-    swt: { x, y: y2, z: z2 },
-  };
+function addBaseShell(triangles: Triangle[], x: number, y: number, size: number, height: number): void {
+  const x2 = x + size;
+  const y2 = y + size;
+  const bottomLeft = { x, y, z: 0 };
+  const bottomRight = { x: x2, y, z: 0 };
+  const topRight = { x: x2, y: y2, z: 0 };
+  const topLeft = { x, y: y2, z: 0 };
+  const upperLeft = { x, y, z: height };
+  const upperRight = { x: x2, y, z: height };
+  const upperTopRight = { x: x2, y: y2, z: height };
+  const upperTopLeft = { x, y: y2, z: height };
 
-  triangles.push(
-    { a: v.nwt, b: v.net, c: v.set, material },
-    { a: v.nwt, b: v.set, c: v.swt, material },
-    { a: v.swb, b: v.seb, c: v.neb, material },
-    { a: v.swb, b: v.neb, c: v.nwb, material },
-    { a: v.nwb, b: v.neb, c: v.net, material },
-    { a: v.nwb, b: v.net, c: v.nwt, material },
-    { a: v.seb, b: v.swb, c: v.swt, material },
-    { a: v.seb, b: v.swt, c: v.set, material },
-    { a: v.neb, b: v.seb, c: v.set, material },
-    { a: v.neb, b: v.set, c: v.net, material },
-    { a: v.swb, b: v.nwb, c: v.nwt, material },
-    { a: v.swb, b: v.nwt, c: v.swt, material },
-  );
+  // The top is intentionally omitted. It is tiled later around raised QR cells
+  // so no hidden coplanar faces overlap the module bottoms.
+  addQuad(triangles, bottomLeft, bottomRight, topRight, topLeft, 0);
+  addQuad(triangles, bottomLeft, upperLeft, upperRight, bottomRight, 0);
+  addQuad(triangles, bottomRight, upperRight, upperTopRight, topRight, 0);
+  addQuad(triangles, topRight, upperTopRight, upperTopLeft, topLeft, 0);
+  addQuad(triangles, topLeft, upperTopLeft, upperLeft, bottomLeft, 0);
 }
 
 function addQuad(triangles: Triangle[], a: Vertex, b: Vertex, c: Vertex, d: Vertex, material: MaterialIndex): void {
@@ -122,43 +132,98 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
   const origin = -sizeMm / 2;
   const triangles: Triangle[] = [];
 
-  addBox(triangles, origin, origin, 0, sizeMm, sizeMm, baseHeight, 0);
-
   function cellMaterial(x: number, y: number): MaterialIndex | null {
     if (x < 0 || y < 0 || x >= qr.size || y >= qr.size || !qr.getModule(x, y)) return null;
     return isFinderArea(x, y, qr.size) ? 2 : 1;
   }
 
-  for (const material of [1, 2] as const) {
-    for (let y = 0; y < qr.size; y++) {
-      let runStart = -1;
+  addBaseShell(triangles, origin, origin, sizeMm, baseHeight);
 
-      for (let x = 0; x <= qr.size; x++) {
-        const matches = x < qr.size && cellMaterial(x, y) === material;
-        if (runStart >= 0 && !matches) {
-          const x1 = origin + (quietZone + runStart) * cellSize;
-          const x2 = origin + (quietZone + x) * cellSize;
-          const y1 = origin + (quietZone + y) * cellSize;
-          const y2 = y1 + cellSize;
-          addQuad(
-            triangles,
-            { x: x1, y: y1, z: baseHeight + moduleHeight },
-            { x: x2, y: y1, z: baseHeight + moduleHeight },
-            { x: x2, y: y2, z: baseHeight + moduleHeight },
-            { x: x1, y: y2, z: baseHeight + moduleHeight },
-            material,
-          );
-          addQuad(
-            triangles,
-            { x: x1, y: y2, z: baseHeight },
-            { x: x2, y: y2, z: baseHeight },
-            { x: x2, y: y1, z: baseHeight },
-            { x: x1, y: y1, z: baseHeight },
-            material,
-          );
-          runStart = -1;
+  const baseGridSize = qr.size + quietZone * 2;
+  const baseTopConsumed = Array.from({ length: baseGridSize }, () => Array<boolean>(baseGridSize).fill(false));
+  const baseCellIsRaised = (x: number, y: number): boolean => cellMaterial(x - quietZone, y - quietZone) !== null;
+  for (let y = 0; y < baseGridSize; y++) {
+    for (let x = 0; x < baseGridSize; x++) {
+      if (baseTopConsumed[y][x] || baseCellIsRaised(x, y)) continue;
+      let width = 1;
+      while (x + width < baseGridSize && !baseTopConsumed[y][x + width] && !baseCellIsRaised(x + width, y)) width += 1;
+      let height = 1;
+      while (y + height < baseGridSize) {
+        let rowMatches = true;
+        for (let column = x; column < x + width; column++) {
+          if (baseTopConsumed[y + height][column] || baseCellIsRaised(column, y + height)) {
+            rowMatches = false;
+            break;
+          }
         }
-        if (matches && runStart < 0) runStart = x;
+        if (!rowMatches) break;
+        height += 1;
+      }
+      for (let row = y; row < y + height; row++) {
+        for (let column = x; column < x + width; column++) baseTopConsumed[row][column] = true;
+      }
+      const x1 = origin + x * cellSize;
+      const x2 = origin + (x + width) * cellSize;
+      const y1 = origin + y * cellSize;
+      const y2 = origin + (y + height) * cellSize;
+      addQuad(
+        triangles,
+        { x: x1, y: y1, z: baseHeight },
+        { x: x1, y: y2, z: baseHeight },
+        { x: x2, y: y2, z: baseHeight },
+        { x: x2, y: y1, z: baseHeight },
+        0,
+      );
+    }
+  }
+
+  for (const material of [1, 2] as const) {
+    // Greedy rectangle meshing removes coplanar strip seams while keeping
+    // finder and module material boundaries distinct.
+    const consumed = Array.from({ length: qr.size }, () => Array<boolean>(qr.size).fill(false));
+    for (let y = 0; y < qr.size; y++) {
+      for (let x = 0; x < qr.size; x++) {
+        if (consumed[y][x] || cellMaterial(x, y) !== material) continue;
+
+        let width = 1;
+        while (x + width < qr.size && !consumed[y][x + width] && cellMaterial(x + width, y) === material) width += 1;
+        let height = 1;
+        while (y + height < qr.size) {
+          let rowMatches = true;
+          for (let column = x; column < x + width; column++) {
+            if (consumed[y + height][column] || cellMaterial(column, y + height) !== material) {
+              rowMatches = false;
+              break;
+            }
+          }
+          if (!rowMatches) break;
+          height += 1;
+        }
+
+        for (let row = y; row < y + height; row++) {
+          for (let column = x; column < x + width; column++) consumed[row][column] = true;
+        }
+
+        const x1 = origin + (quietZone + x) * cellSize;
+        const x2 = origin + (quietZone + x + width) * cellSize;
+        const y1 = origin + (quietZone + y) * cellSize;
+        const y2 = origin + (quietZone + y + height) * cellSize;
+        addQuad(
+          triangles,
+          { x: x1, y: y1, z: baseHeight + moduleHeight },
+          { x: x2, y: y1, z: baseHeight + moduleHeight },
+          { x: x2, y: y2, z: baseHeight + moduleHeight },
+          { x: x1, y: y2, z: baseHeight + moduleHeight },
+          material,
+        );
+        addQuad(
+          triangles,
+          { x: x1, y: y2, z: baseHeight },
+          { x: x2, y: y2, z: baseHeight },
+          { x: x2, y: y1, z: baseHeight },
+          { x: x1, y: y1, z: baseHeight },
+          material,
+        );
       }
     }
 
@@ -246,17 +311,27 @@ export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materi
   const triangles = modelTriangles(qr, options);
   const vertices: string[] = [];
   const faces: string[] = [];
+  const vertexKeys = new Map<string, number>();
   const materialNames = ["base", "modules", "finders"];
   let activeMaterial = "";
   let activeGroup = "";
 
-  for (const triangle of triangles) {
-    const start = vertices.length + 1;
-    vertices.push(
-      `v ${number(triangle.a.x)} ${number(triangle.a.y)} ${number(triangle.a.z)}`,
-      `v ${number(triangle.b.x)} ${number(triangle.b.y)} ${number(triangle.b.z)}`,
-      `v ${number(triangle.c.x)} ${number(triangle.c.y)} ${number(triangle.c.z)}`,
-    );
+  function vertexIndex(vertex: Vertex): number {
+    const key = `${number(vertex.x)},${number(vertex.y)},${number(vertex.z)}`;
+    const existing = vertexKeys.get(key);
+    if (existing !== undefined) return existing;
+    const index = vertexKeys.size + 1;
+    vertexKeys.set(key, index);
+    vertices.push(`v ${number(vertex.x)} ${number(vertex.y)} ${number(vertex.z)}`);
+    return index;
+  }
+
+  // The shared model is triangulated for STL and 3MF compatibility. OBJ can
+  // retain each source quad and weld shared coordinates for clean Blender topology.
+  for (let index = 0; index < triangles.length; index += 2) {
+    const triangle = triangles[index];
+    const next = triangles[index + 1];
+    if (!triangle) continue;
     const material = materialNames[triangle.material];
     if (activeGroup !== material) {
       faces.push(`g ${material}`);
@@ -266,12 +341,17 @@ export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materi
       faces.push(`usemtl ${material}`);
       activeMaterial = material;
     }
-    faces.push(`f ${start} ${start + 1} ${start + 2}`);
+    if (next && next.material === triangle.material) {
+      faces.push(`f ${vertexIndex(triangle.a)} ${vertexIndex(triangle.b)} ${vertexIndex(triangle.c)} ${vertexIndex(next.c)}`);
+    } else {
+      faces.push(`f ${vertexIndex(triangle.a)} ${vertexIndex(triangle.b)} ${vertexIndex(triangle.c)}`);
+    }
   }
 
   return [
     "# SayaQR print-ready QR coaster",
     "# OBJ export for Blender and 3D tools. Units are millimeters.",
+    "# Planar source faces are welded and exported as quads for easier editing and beveling.",
     `mtllib ${materialLibraryName}`,
     "o SayaQR_coaster",
     ...vertices,

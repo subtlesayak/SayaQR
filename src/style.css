@@ -947,6 +947,34 @@ input[type="file"] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.model3d-settings {
+  padding: 4px 0 8px;
+}
+
+.model3d-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.model3d-guidance {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid #cde9e2;
+  border-radius: 6px;
+  background: #f5fffc;
+  color: #0f766e;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.model3d-guidance[data-level="warning"] {
+  border-color: #fed7aa;
+  background: #fffaf2;
+  color: #9a3412;
+}
+
 .batch-file-drop {
   position: relative;
   cursor: pointer;
@@ -2064,7 +2092,8 @@ summary {
   }
 
   .advanced-size-row,
-  .advanced-preference-row {
+  .advanced-preference-row,
+  .model3d-settings-grid {
     grid-template-columns: 1fr;
   }
 

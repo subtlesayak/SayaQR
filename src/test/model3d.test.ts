@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createQrCode } from "../lib/qr";
 import { DEFAULT_RENDER_OPTIONS } from "../lib/render";
-import { objZipBlob, qr3dOptionsFromRenderOptions, qrToMtl, qrToObj, qrToStl, stlBlob, threeMfBlob } from "../lib/model3d";
+import { getQr3dPrintabilityWarnings, objZipBlob, qr3dCellSizeMm, qr3dOptionsFromRenderOptions, qrToMtl, qrToObj, qrToStl, stlBlob, threeMfBlob } from "../lib/model3d";
 
 describe("3D QR exports", () => {
   it("renders an STL coaster mesh", async () => {
@@ -68,10 +68,23 @@ describe("3D QR exports", () => {
     expect(obj).toContain("g modules");
     expect(obj).toContain("g finders");
     expect(obj).toContain("usemtl modules");
-    expect(obj).toContain("f ");
+    expect(obj).toContain("Planar source faces are welded and exported as quads");
+    expect(obj).toMatch(/f \d+ \d+ \d+ \d+/);
     expect(mtl).toContain("newmtl modules");
     expect(mtl).toContain("Kd 0.0706 0.2039 0.3373");
     expect(zipText).toContain("sayaqr-coaster.obj");
     expect(zipText).toContain("sayaqr-coaster.mtl");
+  });
+
+  it("reports printability risks from actual cell size and raised height", () => {
+    const qr = createQrCode("https://example.com", "HIGH");
+    expect(qr3dCellSizeMm(qr, { sizeMm: 100, quietZone: 4 })).toBeGreaterThan(1);
+    expect(getQr3dPrintabilityWarnings(qr, { sizeMm: 60, quietZone: 4, moduleHeightMm: 0.4 })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ level: "warning" }),
+      expect.objectContaining({ message: expect.stringContaining("Raised height") }),
+    ]));
+    expect(getQr3dPrintabilityWarnings(qr, { sizeMm: 100, quietZone: 4, moduleHeightMm: 1.2 })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ level: "info", message: expect.stringContaining("3MF") }),
+    ]));
   });
 });

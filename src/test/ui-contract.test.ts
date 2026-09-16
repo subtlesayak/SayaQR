@@ -67,6 +67,13 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain("Export resolution");
     expect(mainSource).toContain('id="logoPresetSelect"');
     expect(mainSource).toContain('id="logoUpload"');
+    expect(mainSource).toContain("3D coaster export");
+    expect(mainSource).toContain('id="model3dSize"');
+    expect(mainSource).toContain('id="model3dBase"');
+    expect(mainSource).toContain('id="model3dHeight"');
+    expect(mainSource).toContain('id="model3dDetails"');
+    expect(mainSource.indexOf('id="model3dDetails"')).toBeGreaterThan(mainSource.indexOf('id="customizeDetails"'));
+    expect(mainSource.indexOf('id="model3dDetails"')).toBeLessThan(mainSource.indexOf('class="tool-surface batch-zone'));
     expect(mainSource).toContain("registerServiceWorker();");
   });
 

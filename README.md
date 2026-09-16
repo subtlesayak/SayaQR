@@ -95,7 +95,7 @@ SVG, PNG, WebP, PDF, clipboard copy, and native sharing all use the styled previ
 
 PDF export embeds a lossless PNG at a minimum of 1600 × 1600 pixels. Transparent backgrounds become white for PDF because printed paper has a background.
 
-3D exports generate a 100 mm square cup-coaster model locally from the same QR payload and error-correction level. STL is geometry-only for broad slicer compatibility. 3MF preserves the selected module, finder, and base colors as material metadata. OBJ downloads as a ZIP containing `.obj` and `.mtl` files for Blender and other 3D tools.
+3D exports generate a configurable square cup-coaster model locally from the same QR payload and error-correction level. The advanced 3D settings support 90, 95, 100, and 105 mm coaster sizes plus base and raised-module heights. SayaQR reports small-cell and low-height print risks before export. STL is geometry-only for broad slicer compatibility. 3MF separates the base, QR modules, and finder modules so Bambu Studio can assign materials. OBJ downloads as a ZIP containing named Blender groups plus `.obj` and `.mtl` files.
 
 Copy and Share appear only when the browser supports those capabilities. Installed PWAs can receive shared URLs or text; incoming share parameters are auto-detected locally and removed from browser history immediately.
 

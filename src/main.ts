@@ -51,7 +51,7 @@ import {
   type ModuleStyle,
   type QrRenderOptions,
 } from "./lib/render";
-import { objZipBlob, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob } from "./lib/model3d";
+import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, objZipBlob, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob } from "./lib/model3d";
 import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
@@ -417,6 +417,18 @@ function renderApp(): void {
                 <p id="designMemoryStatus" class="design-memory-status field-wide" aria-live="polite"></p>
               </div>
             </details>
+          </div>
+        </details>
+        <details class="disclosure model3d-disclosure" id="model3dDetails">
+          <summary>3D coaster export</summary>
+          <div class="disclosure-body model3d-settings">
+            <p class="control-hint">Raised QR coaster in millimetres. The default is a cup-coaster size.</p>
+            <div class="model3d-settings-grid">
+              <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
+              <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
+              <label class="field"><span>Raised height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
+            </div>
+            <p id="model3dGuidance" class="model3d-guidance" aria-live="polite">Select a 3D format to see print guidance.</p>
           </div>
         </details>
       </section>
@@ -791,6 +803,9 @@ const DESIGN_CONTROL_IDS = new Set([
   "logoStrokeColor",
   "logoStrokeColorHex",
   "logoScale",
+  "model3dSize",
+  "model3dBase",
+  "model3dHeight",
 ]);
 
 function readDesignPreferencesFromControls(): DesignPreferences {
@@ -985,10 +1000,40 @@ function updateSliderLabels(): void {
   const moduleSize = document.querySelector<HTMLInputElement>("#moduleSize")?.value ?? "12";
   const rounded = Number(document.querySelector<HTMLInputElement>("#rounded")?.value ?? "0.12");
   const logoScale = Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? "0.18");
+  const model3dBase = Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? "2");
+  const model3dHeight = Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? "1.2");
   document.querySelector("#marginValue")!.textContent = margin;
   document.querySelector("#moduleSizeValue")!.textContent = moduleSize;
   document.querySelector("#roundedValue")!.textContent = `${Math.round(rounded * 100)}%`;
   document.querySelector("#logoSizeValue")!.textContent = `${Math.round(logoScale * 100)}%`;
+  document.querySelector("#model3dBaseValue")!.textContent = `${model3dBase.toFixed(1)} mm`;
+  document.querySelector("#model3dHeightValue")!.textContent = `${model3dHeight.toFixed(1)} mm`;
+}
+
+function get3dOptions(renderOptions: QrRenderOptions) {
+  return {
+    ...qr3dOptionsFromRenderOptions(renderOptions),
+    sizeMm: Number(document.querySelector<HTMLSelectElement>("#model3dSize")?.value ?? 100),
+    baseHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? 2),
+    moduleHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? 1.2),
+  };
+}
+
+function update3dGuidance(): void {
+  const guidance = document.querySelector<HTMLElement>("#model3dGuidance");
+  if (!guidance || !currentPayload.trim()) {
+    if (guidance) guidance.textContent = "Select a 3D format to see print guidance.";
+    return;
+  }
+  try {
+    const options = get3dOptions(getRenderOptions());
+    const qr = createQrCode(currentPayload, getRenderOptions().ecc);
+    const warnings = getQr3dPrintabilityWarnings(qr, options);
+    guidance.textContent = warnings.map((warning) => warning.message).join(" ");
+    guidance.dataset.level = warnings.some((warning) => warning.level === "warning") ? "warning" : "info";
+  } catch {
+    guidance.textContent = "3D settings will be checked when the QR is generated.";
+  }
 }
 
 function updateLogoStrokeColorVisibility(): void {
@@ -1260,6 +1305,7 @@ function updateQr(): void {
   const options = getRenderOptions();
   const fields = collectPayloadFields();
   currentPayload = formatPayload(currentMode, fields);
+  update3dGuidance();
   const previewZone = document.querySelector<HTMLElement>(".preview-zone");
   if (previewZone) previewZone.dataset.contentState = currentPayload.trim() ? "ready" : "empty";
   output.value = currentPayload;
@@ -1335,11 +1381,11 @@ async function exportCurrent(format: string): Promise<void> {
     if (format === "png") downloadBlob(await svgToRasterBlob(currentSvg, "image/png"), filename);
     if (format === "webp") downloadBlob(await svgToRasterBlob(currentSvg, "image/webp"), filename);
     if (format === "pdf") downloadBlob(await svgToPdfBlob(currentSvg), filename);
-    if (format === "stl") downloadBlob(stlBlob(createQrCode(currentPayload, renderOptions.ecc), qr3dOptionsFromRenderOptions(renderOptions)), filename);
-    if (format === "3mf") downloadBlob(await threeMfBlob(createQrCode(currentPayload, renderOptions.ecc), qr3dOptionsFromRenderOptions(renderOptions)), filename);
+    if (format === "stl") downloadBlob(stlBlob(createQrCode(currentPayload, renderOptions.ecc), get3dOptions(renderOptions)), filename);
+    if (format === "3mf") downloadBlob(await threeMfBlob(createQrCode(currentPayload, renderOptions.ecc), get3dOptions(renderOptions)), filename);
     if (format === "obj") {
       downloadedFilename = filename.replace(/\.obj$/i, "-obj.zip");
-      downloadBlob(await objZipBlob(createQrCode(currentPayload, renderOptions.ecc), qr3dOptionsFromRenderOptions(renderOptions)), downloadedFilename);
+      downloadBlob(await objZipBlob(createQrCode(currentPayload, renderOptions.ecc), get3dOptions(renderOptions)), downloadedFilename);
     }
     if (status) status.textContent = "Downloaded " + downloadedFilename + ".";
   } catch {
@@ -1606,11 +1652,11 @@ async function exportBatchZip(): Promise<void> {
           } else if (format === "pdf") {
             files.push({ name: `${row.outputFilename}.pdf`, data: await svgToPdfBlob(svg) });
           } else if (format === "stl") {
-            files.push({ name: `${row.outputFilename}.stl`, data: stlBlob(qr, qr3dOptionsFromRenderOptions(options)) });
+            files.push({ name: `${row.outputFilename}.stl`, data: stlBlob(qr, get3dOptions(options)) });
           } else if (format === "3mf") {
-            files.push({ name: `${row.outputFilename}.3mf`, data: await threeMfBlob(qr, qr3dOptionsFromRenderOptions(options)) });
+            files.push({ name: `${row.outputFilename}.3mf`, data: await threeMfBlob(qr, get3dOptions(options)) });
           } else if (format === "obj") {
-            const bundle = await objZipBlob(qr, qr3dOptionsFromRenderOptions(options));
+            const bundle = await objZipBlob(qr, get3dOptions(options));
             files.push({ name: `${row.outputFilename}-obj.zip`, data: bundle });
           } else {
             const mime = format === "webp" ? "image/webp" : "image/png";
