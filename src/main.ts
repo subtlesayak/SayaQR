@@ -51,7 +51,7 @@ import {
   type ModuleStyle,
   type QrRenderOptions,
 } from "./lib/render";
-import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, objZipBlob, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob } from "./lib/model3d";
+import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, objZipBlob, QR3D_PRINT_PROFILES, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob, type Qr3dModelOptions } from "./lib/model3d";
 import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
@@ -422,9 +422,10 @@ function renderApp(): void {
         <details class="disclosure model3d-disclosure" id="model3dDetails">
           <summary>3D coaster export</summary>
           <div class="disclosure-body model3d-settings">
-            <p class="control-hint">Raised QR coaster in millimetres. The default is a cup-coaster size.</p>
-            <div class="model3d-settings-grid">
-              <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
+              <p class="control-hint">Raised QR coaster in millimetres. The default is a cup-coaster size.</p>
+              <div class="model3d-settings-grid">
+                <label class="field field-wide"><span>Print profile</span><select id="model3dProfile">${QR3D_PRINT_PROFILES.map((profile) => `<option value="${profile.id}"${profile.id === "bambu-ams" ? " selected" : ""}>${profile.name}</option>`).join("")}</select><small id="model3dProfileHint" class="control-hint">${QR3D_PRINT_PROFILES[0].description}</small></label>
+                <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
               <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
               <label class="field"><span>Raised height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
             </div>
@@ -806,6 +807,7 @@ const DESIGN_CONTROL_IDS = new Set([
   "model3dSize",
   "model3dBase",
   "model3dHeight",
+  "model3dProfile",
 ]);
 
 function readDesignPreferencesFromControls(): DesignPreferences {
@@ -1013,6 +1015,7 @@ function updateSliderLabels(): void {
 function get3dOptions(renderOptions: QrRenderOptions) {
   return {
     ...qr3dOptionsFromRenderOptions(renderOptions),
+    profile: (document.querySelector<HTMLSelectElement>("#model3dProfile")?.value ?? "bambu-ams") as Qr3dModelOptions["profile"],
     sizeMm: Number(document.querySelector<HTMLSelectElement>("#model3dSize")?.value ?? 100),
     baseHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? 2),
     moduleHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? 1.2),
@@ -1034,6 +1037,19 @@ function update3dGuidance(): void {
   } catch {
     guidance.textContent = "3D settings will be checked when the QR is generated.";
   }
+}
+
+function update3dProfile(): void {
+  const select = document.querySelector<HTMLSelectElement>("#model3dProfile");
+  const preset = QR3D_PRINT_PROFILES.find((profile) => profile.id === select?.value);
+  if (!preset) return;
+  const base = document.querySelector<HTMLInputElement>("#model3dBase");
+  const height = document.querySelector<HTMLInputElement>("#model3dHeight");
+  if (base) base.value = String(preset.baseHeightMm);
+  if (height) height.value = String(preset.moduleHeightMm);
+  const hint = document.querySelector<HTMLElement>("#model3dProfileHint");
+  if (hint) hint.textContent = `${preset.description} ${preset.materialNote}`;
+  updateSliderLabels();
 }
 
 function updateLogoStrokeColorVisibility(): void {
@@ -1795,6 +1811,12 @@ function wireEvents(): void {
         updateModuleStyleHint();
         scheduleQrUpdate();
         persistDesignIfEnabled();
+        return;
+      }
+
+      if (target.id === "model3dProfile") {
+        update3dProfile();
+        scheduleQrUpdate();
         return;
       }
 

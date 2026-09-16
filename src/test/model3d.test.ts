@@ -55,6 +55,7 @@ describe("3D QR exports", () => {
     expect(text).toContain('p1="1" p2="1" p3="1"');
     expect(text).toContain('<item objectid="4"/>');
     expect(text).toContain("unit=\"millimeter\"");
+    expect(text).toContain("README.txt");
   });
 
   it("creates Blender-ready OBJ and MTL files", async () => {
@@ -65,6 +66,8 @@ describe("3D QR exports", () => {
     const zipText = new TextDecoder().decode(new Uint8Array(await zip.arrayBuffer()));
 
     expect(obj).toContain("mtllib test.mtl");
+    expect(obj).toContain("Coordinates are meters");
+    expect(obj).toContain("v -0.05 -0.05 0");
     expect(obj).toContain("g modules");
     expect(obj).toContain("g finders");
     expect(obj).toContain("usemtl modules");
@@ -74,6 +77,7 @@ describe("3D QR exports", () => {
     expect(mtl).toContain("Kd 0.0706 0.2039 0.3373");
     expect(zipText).toContain("sayaqr-coaster.obj");
     expect(zipText).toContain("sayaqr-coaster.mtl");
+    expect(zipText).toContain("README.txt");
   });
 
   it("reports printability risks from actual cell size and raised height", () => {

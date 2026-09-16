@@ -3,6 +3,7 @@ import type { QrRenderOptions } from "./render";
 import { createZip, type ZipInputFile } from "./zip";
 
 export interface Qr3dModelOptions {
+  profile?: Qr3dPrintProfile;
   sizeMm?: number;
   baseHeightMm?: number;
   moduleHeightMm?: number;
@@ -11,6 +12,25 @@ export interface Qr3dModelOptions {
   finderColor?: string;
   baseColor?: string;
 }
+
+export type Qr3dPrintProfile = "bambu-ams" | "single-color" | "filament-swap" | "laser-cnc" | "resin";
+
+export interface Qr3dPrintProfilePreset {
+  id: Qr3dPrintProfile;
+  name: string;
+  description: string;
+  baseHeightMm: number;
+  moduleHeightMm: number;
+  materialNote: string;
+}
+
+export const QR3D_PRINT_PROFILES: readonly Qr3dPrintProfilePreset[] = [
+  { id: "bambu-ams", name: "Bambu AMS / multi-color", description: "Separate base, modules, and finder parts for material assignment.", baseHeightMm: 2, moduleHeightMm: 1.2, materialNote: "3MF keeps three material regions separate." },
+  { id: "single-color", name: "Single-color raised QR", description: "One filament with a readable raised QR.", baseHeightMm: 2, moduleHeightMm: 1.2, materialNote: "STL is suitable for a single filament." },
+  { id: "filament-swap", name: "Two-color filament swap", description: "Pause-friendly base and QR height for a manual swap.", baseHeightMm: 2.4, moduleHeightMm: 0.8, materialNote: "Swap filament at the raised QR layer." },
+  { id: "laser-cnc", name: "Laser / CNC engraved", description: "Flat layout reference for subtractive workflows.", baseHeightMm: 3, moduleHeightMm: 0.8, materialNote: "Use the model as a millimetre layout reference." },
+  { id: "resin", name: "Resin print", description: "Lower relief for fine-detail resin printers.", baseHeightMm: 1.8, moduleHeightMm: 0.7, materialNote: "Orient and support according to your resin workflow." },
+] as const;
 
 export const COASTER_SIZE_PRESETS = [
   { value: 90, label: "90 mm · compact" },
@@ -40,6 +60,7 @@ interface Triangle {
 type MaterialIndex = 0 | 1 | 2;
 
 const DEFAULT_3D_OPTIONS = {
+  profile: "bambu-ams" as Qr3dPrintProfile,
   sizeMm: 100,
   baseHeightMm: 2,
   moduleHeightMm: 1.2,
@@ -62,6 +83,7 @@ export function getQr3dPrintabilityWarnings(qr: NayukiQrCode, options: Qr3dModel
   if (cellSize < 1.2) warnings.push({ level: "warning", message: `Small QR cells (${cellSize.toFixed(2)} mm). Use 100 mm or larger for easier printing.` });
   else if (cellSize < 1.5) warnings.push({ level: "warning", message: `Fine QR cells (${cellSize.toFixed(2)} mm). A 0.4 mm nozzle may soften detail.` });
   if (moduleHeight < 0.6) warnings.push({ level: "warning", message: "Raised height below 0.6 mm may disappear on the first layers." });
+  if (options.profile === "laser-cnc") warnings.push({ level: "info", message: "Laser/CNC output is a geometric reference; verify tool diameter and depth separately." });
   warnings.push({ level: "info", message: "STL is single-material; use 3MF for Bambu material assignment or OBJ for Blender." });
   return warnings;
 }
@@ -92,6 +114,12 @@ function escapeXml(value: string): string {
 
 function number(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function objNumber(value: number): string {
+  // Blender treats an imported OBJ unit as one metre by default. Encoding
+  // coordinates in metres makes the 100 mm coaster import at the right size.
+  return number(value / 1000);
 }
 
 function isFinderArea(x: number, y: number, size: number): boolean {
@@ -322,7 +350,7 @@ export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materi
     if (existing !== undefined) return existing;
     const index = vertexKeys.size + 1;
     vertexKeys.set(key, index);
-    vertices.push(`v ${number(vertex.x)} ${number(vertex.y)} ${number(vertex.z)}`);
+    vertices.push(`v ${objNumber(vertex.x)} ${objNumber(vertex.y)} ${objNumber(vertex.z)}`);
     return index;
   }
 
@@ -350,7 +378,7 @@ export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materi
 
   return [
     "# SayaQR print-ready QR coaster",
-    "# OBJ export for Blender and 3D tools. Units are millimeters.",
+    "# OBJ export for Blender and 3D tools. Coordinates are meters; coaster dimensions are 100 mm by default.",
     "# Planar source faces are welded and exported as quads for easier editing and beveling.",
     `mtllib ${materialLibraryName}`,
     "o SayaQR_coaster",
@@ -377,12 +405,29 @@ export function qrToMtl(options: Qr3dModelOptions = {}): string {
   ].join("\n")).join("\n\n") + "\n";
 }
 
+function modelReadme(options: Qr3dModelOptions = {}): string {
+  const profile = QR3D_PRINT_PROFILES.find((item) => item.id === options.profile) ?? QR3D_PRINT_PROFILES[0];
+  return [
+    "SayaQR 3D QR coaster",
+    "Generated locally in the browser.",
+    `Profile: ${profile.name}`,
+    `Size: ${optionValue(options, "sizeMm")} mm square`,
+    `Base: ${optionValue(options, "baseHeightMm")} mm`,
+    `Raised QR: ${optionValue(options, "moduleHeightMm")} mm`,
+    "STL is single-material. 3MF contains separate base, module, and finder parts.",
+    "OBJ coordinates are encoded in metres for Blender's default importer and include an MTL file.",
+    "Check the exported model in your slicer before printing.",
+    "",
+  ].join("\n");
+}
+
 export async function objZipBlob(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Promise<Blob> {
   const objName = "sayaqr-coaster.obj";
   const mtlName = "sayaqr-coaster.mtl";
   return createZip([
     { name: objName, data: qrToObj(qr, options, mtlName) },
     { name: mtlName, data: qrToMtl(options) },
+    { name: "README.txt", data: modelReadme(options) },
   ]);
 }
 
@@ -471,6 +516,10 @@ export async function threeMfBlob(qr: NayukiQrCode, options: Qr3dModelOptions = 
     {
       name: "3D/3dmodel.model",
       data: build3mfModel(qr, options),
+    },
+    {
+      name: "README.txt",
+      data: modelReadme(options),
     },
   ];
   return createZip(files);
