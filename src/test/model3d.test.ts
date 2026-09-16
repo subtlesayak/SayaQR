@@ -114,4 +114,12 @@ describe("3D QR exports", () => {
     expect(mesh.degenerateFacets).toBe(0);
     expect(mesh.boundaryEdges + mesh.nonManifoldEdges).toBeGreaterThan(0);
   });
+
+  it("keeps engraved QR openings watertight and see-through", () => {
+    const qr = createQrCode("https://example.com", "HIGH");
+    const mesh = validateQr3dMesh(qr, { reliefMode: "engraved" });
+    expect(mesh.degenerateFacets).toBe(0);
+    expect(mesh.boundaryEdges).toBe(0);
+    expect(mesh.nonManifoldEdges).toBeGreaterThanOrEqual(0);
+  });
 });

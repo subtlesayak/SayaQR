@@ -242,6 +242,34 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
     return isFinderArea(x, y, qr.size) ? 2 : 1;
   }
 
+  if (reliefMode === "engraved") {
+    // Build a watertight perforated shell directly from the occupancy grid.
+    // QR cells are absent from both planes; only their shared boundary walls
+    // remain, making every module a genuine through-hole without overlapping
+    // boxes for the slicer to repair.
+    const isHole = (x: number, y: number): boolean => cellMaterial(x - quietZone, y - quietZone) !== null;
+    const addVerticalWall = (x1: number, y1: number, x2: number, y2: number): void => {
+      addQuad(triangles, { x: x1, y: y1, z: 0 }, { x: x2, y: y2, z: 0 }, { x: x2, y: y2, z: baseHeight }, { x: x1, y: y1, z: baseHeight }, 0);
+    };
+
+    for (let y = 0; y < baseGridSize; y++) {
+      for (let x = 0; x < baseGridSize; x++) {
+        if (isHole(x, y)) continue;
+        const x1 = origin + x * cellSize;
+        const x2 = x1 + cellSize;
+        const y1 = origin + y * cellSize;
+        const y2 = y1 + cellSize;
+        addQuad(triangles, { x: x1, y: y1, z: baseHeight }, { x: x2, y: y1, z: baseHeight }, { x: x2, y: y2, z: baseHeight }, { x: x1, y: y2, z: baseHeight }, 0);
+        addQuad(triangles, { x: x1, y: y2, z: 0 }, { x: x2, y: y2, z: 0 }, { x: x2, y: y1, z: 0 }, { x: x1, y: y1, z: 0 }, 0);
+        if (x === 0 || isHole(x - 1, y)) addVerticalWall(x1, y2, x1, y1);
+        if (x === baseGridSize - 1 || isHole(x + 1, y)) addVerticalWall(x2, y1, x2, y2);
+        if (y === 0 || isHole(x, y - 1)) addVerticalWall(x2, y1, x1, y1);
+        if (y === baseGridSize - 1 || isHole(x, y + 1)) addVerticalWall(x1, y2, x2, y2);
+      }
+    }
+    return triangles;
+  }
+
   addBaseShell(triangles, origin, origin, sizeMm, baseHeight, baseGridSize, 0);
 
   // Raised mode gets a printable underside inlay. Engraved mode intentionally
@@ -259,26 +287,9 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
     }
   }
 
-  // Engraved QR cells are true through-holes. Build only the non-QR cells as
-  // solid prisms so the removed modules cannot be filled during repair.
-  if (reliefMode === "engraved") {
-    for (let y = 0; y < baseGridSize; y++) {
-      for (let x = 0; x < baseGridSize; x++) {
-        if (cellMaterial(x - quietZone, y - quietZone) !== null) continue;
-        const x1 = origin + x * cellSize;
-        const x2 = x1 + cellSize;
-        const y1 = origin + y * cellSize;
-        const y2 = y1 + cellSize;
-        addBox(triangles, x1, y1, x2, y2, 0, baseHeight, 0);
-      }
-    }
-  }
-
-  // Keep the base object closed around the perimeter. QR cells stay open in
-  // engraved mode so there is no bottom face for the slicer to fill.
+  // Keep the raised base object closed around the perimeter.
   for (let y = 0; y < baseGridSize; y++) {
     for (let x = 0; x < baseGridSize; x++) {
-      if (reliefMode === "engraved" && cellMaterial(x - quietZone, y - quietZone) !== null) continue;
       const x1 = origin + x * cellSize;
       const x2 = x1 + cellSize;
       const y1 = origin + y * cellSize;
@@ -316,8 +327,8 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
         const x2 = x1 + cellSize;
         const y1 = origin + (quietZone + y) * cellSize;
         const y2 = y1 + cellSize;
-        const surfaceMaterial: MaterialIndex = reliefMode === "engraved" ? 0 : material;
-        if (reliefMode === "raised") {
+        const surfaceMaterial = material;
+        {
           addQuad(
             triangles,
             { x: x1, y: y1, z: baseHeight + moduleHeight },
@@ -336,8 +347,8 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
           );
         }
 
-        const z1 = reliefMode === "engraved" ? baseHeight - reliefDepth : qrBodyBottom;
-        const z2 = reliefMode === "engraved" ? baseHeight : baseHeight + moduleHeight;
+        const z1 = qrBodyBottom;
+        const z2 = baseHeight + moduleHeight;
         const addSide = (neighbor: MaterialIndex | null, side: "top" | "right" | "bottom" | "left"): void => {
           // At a material boundary one shared wall is enough. Finder walls
           // own the boundary so the combined multi-material mesh has no
