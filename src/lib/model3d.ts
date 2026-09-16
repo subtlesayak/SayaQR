@@ -300,36 +300,74 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
             { x: x1, y: y1, z: baseHeight },
             material,
           );
+        } else {
+          addQuad(
+            triangles,
+            { x: x1, y: y2, z: baseHeight - moduleHeight },
+            { x: x2, y: y2, z: baseHeight - moduleHeight },
+            { x: x2, y: y1, z: baseHeight - moduleHeight },
+            { x: x1, y: y1, z: baseHeight - moduleHeight },
+            material,
+          );
         }
-      }
-    }
 
-    for (let y = 0; y < qr.size; y++) {
-      for (let x = 0; x < qr.size; x++) {
-        if (cellMaterial(x, y) !== material) continue;
-        const x1 = origin + (quietZone + x) * cellSize;
-        const x2 = x1 + cellSize;
-        const y1 = origin + (quietZone + y) * cellSize;
-        const y2 = y1 + cellSize;
         const z1 = reliefMode === "engraved" ? baseHeight - moduleHeight : baseHeight;
         const z2 = reliefMode === "engraved" ? baseHeight : baseHeight + moduleHeight;
+        const addHorizontalBoundary = (neighborY: number, edgeY: number): void => {
+          let runStart = -1;
+          const finishRun = (runEnd: number): void => {
+            if (runStart < 0) return;
+            const runX1 = origin + (quietZone + runStart) * cellSize;
+            const runX2 = origin + (quietZone + runEnd) * cellSize;
+            addQuad(
+              triangles,
+              { x: runX1, y: edgeY, z: z1 },
+              { x: runX2, y: edgeY, z: z1 },
+              { x: runX2, y: edgeY, z: z2 },
+              { x: runX1, y: edgeY, z: z2 },
+              material,
+            );
+            runStart = -1;
+          };
+          for (let column = x; column < x + width; column++) {
+            if (cellMaterial(column, neighborY) !== material) {
+              if (runStart < 0) runStart = column;
+            } else {
+              finishRun(column);
+            }
+          }
+          finishRun(x + width);
+        };
+        const addVerticalBoundary = (neighborX: number, edgeX: number): void => {
+          let runStart = -1;
+          const finishRun = (runEnd: number): void => {
+            if (runStart < 0) return;
+            const runY1 = origin + (quietZone + runStart) * cellSize;
+            const runY2 = origin + (quietZone + runEnd) * cellSize;
+            addQuad(
+              triangles,
+              { x: edgeX, y: runY1, z: z1 },
+              { x: edgeX, y: runY2, z: z1 },
+              { x: edgeX, y: runY2, z: z2 },
+              { x: edgeX, y: runY1, z: z2 },
+              material,
+            );
+            runStart = -1;
+          };
+          for (let row = y; row < y + height; row++) {
+            if (cellMaterial(neighborX, row) !== material) {
+              if (runStart < 0) runStart = row;
+            } else {
+              finishRun(row);
+            }
+          }
+          finishRun(y + height);
+        };
 
-        if (reliefMode === "engraved") {
-          addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, material);
-        }
-
-        if (cellMaterial(x, y - 1) !== material) {
-          addQuad(triangles, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, { x: x1, y: y1, z: z2 }, { x: x2, y: y1, z: z2 }, material);
-        }
-        if (cellMaterial(x + 1, y) !== material) {
-          addQuad(triangles, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x2, y: y1, z: z2 }, { x: x2, y: y2, z: z2 }, material);
-        }
-        if (cellMaterial(x, y + 1) !== material) {
-          addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y2, z: z2 }, { x: x1, y: y2, z: z2 }, material);
-        }
-        if (cellMaterial(x - 1, y) !== material) {
-          addQuad(triangles, { x: x1, y: y1, z: z1 }, { x: x1, y: y2, z: z1 }, { x: x1, y: y2, z: z2 }, { x: x1, y: y1, z: z2 }, material);
-        }
+        addHorizontalBoundary(y - 1, y1);
+        addHorizontalBoundary(y + height, y2);
+        addVerticalBoundary(x - 1, x1);
+        addVerticalBoundary(x + width, x2);
       }
     }
   }
