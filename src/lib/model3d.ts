@@ -187,9 +187,9 @@ function addBaseShell(triangles: Triangle[], x: number, y: number, size: number,
     const first = index * step;
     const second = (index + 1) * step;
     addQuad(triangles, { x: x + first, y, z: 0 }, { x: x + first, y, z: height }, { x: x + second, y, z: height }, { x: x + second, y, z: 0 }, 0);
-    addQuad(triangles, { x: x + second, y, z: 0 }, { x: x + second, y, z: height }, { x: x + second, y: y + size, z: height }, { x: x + second, y: y + size, z: 0 }, 0);
-    addQuad(triangles, { x: x + second, y: y + size, z: 0 }, { x: x + second, y: y + size, z: height }, { x: x + first, y: y + size, z: height }, { x: x + first, y: y + size, z: 0 }, 0);
-    addQuad(triangles, { x: x + first, y: y + size, z: 0 }, { x: x + first, y: y + size, z: height }, { x: x + first, y, z: height }, { x: x + first, y, z: 0 }, 0);
+    addQuad(triangles, { x: x + first, y: y + size, z: 0 }, { x: x + second, y: y + size, z: 0 }, { x: x + second, y: y + size, z: height }, { x: x + first, y: y + size, z: height }, 0);
+    addQuad(triangles, { x, y: y + first, z: 0 }, { x, y: y + second, z: 0 }, { x, y: y + second, z: height }, { x, y: y + first, z: height }, 0);
+    addQuad(triangles, { x: x + size, y: y + second, z: 0 }, { x: x + size, y: y + first, z: 0 }, { x: x + size, y: y + first, z: height }, { x: x + size, y: y + second, z: height }, 0);
   }
 }
 
