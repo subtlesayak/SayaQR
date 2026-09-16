@@ -983,22 +983,59 @@ input[type="file"] {
   background: #f7fafc;
 }
 
+.model3d-preview-toolbar,
+.model3d-preview-readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.model3d-preview-toolbar {
+  border-bottom: 1px solid #d7e1ec;
+  background: #ffffff;
+}
+
+.model3d-preview-toolbar .secondary-action {
+  min-height: 32px;
+  padding: 5px 9px;
+}
+
 .model3d-preview-wrap canvas {
   display: block;
   width: 100%;
   height: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+.model3d-preview-wrap canvas.is-dragging {
+  cursor: grabbing;
 }
 
 .model3d-dimensions {
-  position: absolute;
-  right: 10px;
-  bottom: 8px;
-  padding: 4px 7px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.88);
   color: #334155;
-  font-size: 0.75rem;
-  font-weight: 700;
+}
+
+.model3d-preview-readout {
+  border-top: 1px solid #d7e1ec;
+  background: #ffffff;
+}
+
+.model3d-preview-sliders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 11px 10px;
+  background: #ffffff;
+}
+
+.model3d-preview-sliders .field {
+  gap: 4px;
 }
 
 .batch-file-drop {
@@ -1709,9 +1746,7 @@ input[type="file"] {
 
 .format-action-row {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(170px, 1fr) minmax(0, 1.5fr);
-  gap: 7px;
+  display: block;
 }
 
 .alternate-format-actions {
@@ -1723,7 +1758,7 @@ input[type="file"] {
 
 .secondary-export-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -1733,6 +1768,10 @@ input[type="file"] {
 
 .secondary-export-actions[data-count="1"] {
   grid-template-columns: 1fr;
+}
+
+.secondary-export-actions[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .primary-export,

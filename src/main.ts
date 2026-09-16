@@ -51,7 +51,7 @@ import {
   type ModuleStyle,
   type QrRenderOptions,
 } from "./lib/render";
-import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, objZipBlob, QR3D_PRINT_PROFILES, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob, type Qr3dModelOptions } from "./lib/model3d";
+import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, objZipBlob, QR3D_PRINT_PROFILES, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob, validateQr3dMesh, type Qr3dModelOptions } from "./lib/model3d";
 import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
@@ -198,6 +198,7 @@ let currentPayload = "";
 let currentSvg = "";
 let selectedExportFormat: ExportFormat = "png";
 let selected3dFormat: "" | "stl" | "3mf" | "obj" = "";
+let model3dDragState: { x: number; y: number; pitch: number; yaw: number } | null = null;
 let batchData: CsvData | null = null;
 let batchValidation: BatchValidationResult | null = null;
 let batchGenerating = false;
@@ -430,13 +431,8 @@ function renderApp(): void {
               <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
               <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
               <label class="field"><span>Raised height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
+              <label class="field"><span>Relief</span><select id="model3dReliefMode"><option value="raised" selected>Raised QR</option><option value="engraved">Engraved QR</option></select></label>
               <label class="field field-wide"><span>Color strategy</span><select id="model3dColorStrategy"><option value="single">Single color</option><option value="two">Base + QR two-color</option><option value="three" selected>Base + modules + finders</option></select></label>
-              <label class="field"><span>Preview pitch <strong id="model3dPitchValue">35°</strong></span><input id="model3dPitch" type="range" min="15" max="75" value="35" /></label>
-              <label class="field"><span>Preview yaw <strong id="model3dYawValue">-35°</strong></span><input id="model3dYaw" type="range" min="-180" max="180" value="-35" /></label>
-            </div>
-            <div id="model3dPreviewPanel" class="model3d-preview-wrap" hidden>
-              <canvas id="model3dPreview" width="720" height="420" aria-label="Isometric 3D QR coaster preview"></canvas>
-              <span id="model3dDimensions" class="model3d-dimensions" aria-live="polite">100 × 100 × 3.2 mm</span>
             </div>
             <p id="model3dGuidance" class="model3d-guidance" aria-live="polite">Select a 3D format to see print guidance.</p>
           </div>
@@ -491,6 +487,21 @@ function renderApp(): void {
           <div id="offlineStatus" class="status-pill">Offline ready</div>
         </div>
         <div id="qrPreview" class="qr-preview"></div>
+        <div id="model3dPreviewPanel" class="model3d-preview-wrap" hidden>
+          <div class="model3d-preview-toolbar">
+            <span><strong>3D preview</strong> Drag to rotate</span>
+            <button id="model3dResetView" class="secondary-action" type="button">Reset view</button>
+          </div>
+          <canvas id="model3dPreview" width="720" height="420" aria-label="Isometric 3D QR coaster preview"></canvas>
+          <div class="model3d-preview-readout">
+            <span id="model3dDimensions" aria-live="polite">100 × 100 × 3.2 mm</span>
+            <span>Pitch <strong id="model3dPitchValue">35°</strong> · Yaw <strong id="model3dYawValue">-35°</strong></span>
+          </div>
+          <div class="model3d-preview-sliders" aria-label="3D preview angle controls">
+            <label class="field"><span>Pitch</span><input id="model3dPitch" type="range" min="-180" max="180" value="35" /></label>
+            <label class="field"><span>Yaw</span><input id="model3dYaw" type="range" min="-180" max="180" value="-35" /></label>
+          </div>
+        </div>
         <section id="intentPreview" class="intent-preview is-empty" aria-live="polite">
           <span class="intent-badge">Ready</span>
           <h3>Your QR intent will appear here</h3>
@@ -511,10 +522,9 @@ function renderApp(): void {
           </details>
           <div id="warnings" class="warnings" aria-live="polite"></div>
         </section>
-          <p id="formatGuidance" class="format-info" aria-live="polite" aria-atomic="true"><strong id="formatGuidanceName">PNG</strong><span id="formatGuidanceText">Recommended for everyday use</span></p>
+        <p id="formatGuidance" class="format-info" aria-live="polite" aria-atomic="true"><strong id="formatGuidanceName">PNG</strong><span id="formatGuidanceText">Recommended for everyday use</span></p>
         <div class="export-actions" aria-label="Export and share QR code">
           <div class="format-action-row" role="group" aria-label="Choose export format">
-            <button id="downloadSelectedButton" class="primary-export" type="button" aria-describedby="formatGuidance" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span id="downloadSelectedLabel">Download PNG</span></button>
             <div class="alternate-format-actions">
               <button type="button" data-export="png" aria-describedby="formatGuidance" aria-pressed="true" disabled>PNG</button>
               <button type="button" data-export="svg" aria-describedby="formatGuidance" aria-pressed="false" disabled>SVG</button>
@@ -528,6 +538,7 @@ function renderApp(): void {
           <div id="nativeExportActions" class="secondary-export-actions" data-count="0" hidden>
             <button id="copyImage" class="secondary-export-action" type="button" hidden disabled>Copy</button>
             <button id="shareImage" class="secondary-export-action" type="button" hidden disabled>Share</button>
+            <button id="downloadSelectedButton" class="primary-export" type="button" aria-describedby="formatGuidance" hidden disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span id="downloadSelectedLabel">Download PNG</span></button>
           </div>
         </div>
         <p id="exportStatus" class="export-status" aria-live="polite"></p>
@@ -817,6 +828,7 @@ const DESIGN_CONTROL_IDS = new Set([
   "model3dSize",
   "model3dBase",
   "model3dHeight",
+  "model3dReliefMode",
   "model3dColorStrategy",
   "model3dProfile",
   "model3dPitch",
@@ -1036,6 +1048,7 @@ function get3dOptions(renderOptions: QrRenderOptions) {
     ...baseOptions,
     profile: (document.querySelector<HTMLSelectElement>("#model3dProfile")?.value ?? "bambu-ams") as Qr3dModelOptions["profile"],
     colorStrategy,
+    reliefMode: (document.querySelector<HTMLSelectElement>("#model3dReliefMode")?.value ?? "raised") as "raised" | "engraved",
     moduleColor: colorStrategy === "single" ? baseOptions.baseColor : baseOptions.moduleColor,
     finderColor: colorStrategy === "three" ? baseOptions.finderColor : colorStrategy === "two" ? baseOptions.moduleColor : baseOptions.baseColor,
     hasLogo: Boolean(renderOptions.logoDataUrl),
@@ -1056,6 +1069,8 @@ function update3dGuidance(): void {
     const options = get3dOptions(getRenderOptions());
     const qr = createQrCode(currentPayload, getRenderOptions().ecc);
     const warnings = getQr3dPrintabilityWarnings(qr, options);
+    const topology = validateQr3dMesh(qr, options);
+    if (!topology.watertight) warnings.push({ level: "warning", message: `Mesh check: ${topology.boundaryEdges} open edge${topology.boundaryEdges === 1 ? "" : "s"}, ${topology.nonManifoldEdges} non-manifold edge${topology.nonManifoldEdges === 1 ? "" : "s"}. Repair before printing.` });
     guidance.textContent = warnings.map((warning) => warning.message).join(" ");
     guidance.dataset.level = warnings.some((warning) => warning.level === "warning") ? "warning" : "info";
   } catch {
@@ -1145,8 +1160,55 @@ function draw3dPreview(): void {
 function update3dPreviewVisibility(format: string): void {
   selected3dFormat = format === "stl" || format === "3mf" || format === "obj" ? format : "";
   const panel = document.querySelector<HTMLElement>("#model3dPreviewPanel");
+  const qrPreview = document.querySelector<HTMLElement>("#qrPreview");
+  const previewZone = document.querySelector<HTMLElement>(".preview-zone");
   if (panel) panel.hidden = !selected3dFormat;
+  if (qrPreview) qrPreview.hidden = Boolean(selected3dFormat);
+  if (previewZone) previewZone.dataset.previewMode = selected3dFormat ? "3d" : "qr";
   if (selected3dFormat) draw3dPreview();
+}
+
+function wire3dPreviewControls(): void {
+  const canvas = document.querySelector<HTMLCanvasElement>("#model3dPreview");
+  if (!canvas) return;
+  canvas.addEventListener("pointerdown", (event) => {
+    if (!selected3dFormat) return;
+    const pitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? 35);
+    const yaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? -35);
+    model3dDragState = { x: event.clientX, y: event.clientY, pitch, yaw };
+    canvas.setPointerCapture(event.pointerId);
+    canvas.classList.add("is-dragging");
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!model3dDragState) return;
+    const pitch = wrapPreviewAngle(model3dDragState.pitch - (event.clientY - model3dDragState.y) * 0.35);
+    const yaw = wrapPreviewAngle(model3dDragState.yaw + (event.clientX - model3dDragState.x) * 0.5);
+    const pitchInput = document.querySelector<HTMLInputElement>("#model3dPitch");
+    const yawInput = document.querySelector<HTMLInputElement>("#model3dYaw");
+    if (pitchInput) pitchInput.value = String(Math.round(pitch));
+    if (yawInput) yawInput.value = String(Math.round(yaw));
+    updateSliderLabels();
+    draw3dPreview();
+  });
+  const endDrag = (): void => {
+    model3dDragState = null;
+    canvas.classList.remove("is-dragging");
+  };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  document.querySelector<HTMLButtonElement>("#model3dResetView")?.addEventListener("click", () => {
+    const pitch = document.querySelector<HTMLInputElement>("#model3dPitch");
+    const yaw = document.querySelector<HTMLInputElement>("#model3dYaw");
+    if (pitch) pitch.value = "35";
+    if (yaw) yaw.value = "-35";
+    updateSliderLabels();
+    draw3dPreview();
+  });
+}
+
+function wrapPreviewAngle(value: number): number {
+  const wrapped = ((value + 180) % 360 + 360) % 360 - 180;
+  return Math.round(wrapped);
 }
 
 function isFinderPreviewCell(x: number, y: number, size: number): boolean {
@@ -1408,7 +1470,10 @@ function updateExportAvailability(available: boolean): void {
   const mobileToggle = document.querySelector<HTMLButtonElement>("#mobileExportToggle");
   if (mobileToggle) mobileToggle.disabled = !available;
   const downloadButton = document.querySelector<HTMLButtonElement>("#downloadSelectedButton");
-  if (downloadButton) downloadButton.disabled = !available;
+  if (downloadButton) {
+    downloadButton.disabled = !available;
+    downloadButton.hidden = !available;
+  }
   const copyButton = document.querySelector<HTMLButtonElement>("#copyImage");
   const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
   if (copyButton) copyButton.disabled = !available;
@@ -1532,7 +1597,8 @@ function updateNativeActionLayout(): void {
   const copyButton = document.querySelector<HTMLButtonElement>("#copyImage");
   const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
   if (!actions) return;
-  const visibleCount = Number(Boolean(copyButton && !copyButton.hidden)) + Number(Boolean(shareButton && !shareButton.hidden));
+  const downloadButton = document.querySelector<HTMLButtonElement>("#downloadSelectedButton");
+  const visibleCount = Number(Boolean(copyButton && !copyButton.hidden)) + Number(Boolean(shareButton && !shareButton.hidden)) + Number(Boolean(downloadButton && !downloadButton.hidden));
   actions.dataset.count = String(visibleCount);
   actions.hidden = visibleCount === 0;
 }
@@ -2146,6 +2212,7 @@ renderModeTabs();
 renderPayloadFields();
 restoreDesignPreferences();
 wireEvents();
+wire3dPreviewControls();
 updateCustomColorPanel();
 updateLogoStrokeColorVisibility();
 updateModuleStyleHint();

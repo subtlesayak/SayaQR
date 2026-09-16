@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createQrCode } from "../lib/qr";
 import { DEFAULT_RENDER_OPTIONS } from "../lib/render";
-import { getQr3dPrintabilityWarnings, objZipBlob, qr3dCellSizeMm, qr3dOptionsFromRenderOptions, qrToMtl, qrToObj, qrToStl, stlBlob, threeMfBlob } from "../lib/model3d";
+import { getQr3dPrintabilityWarnings, objZipBlob, qr3dCellSizeMm, qr3dIslandStats, qr3dOptionsFromRenderOptions, qrToMtl, qrToObj, qrToStl, stlBlob, threeMfBlob, validateQr3dMesh } from "../lib/model3d";
 
 describe("3D QR exports", () => {
   it("renders an STL coaster mesh", async () => {
@@ -90,5 +90,15 @@ describe("3D QR exports", () => {
     expect(getQr3dPrintabilityWarnings(qr, { sizeMm: 100, quietZone: 4, moduleHeightMm: 1.2 })).toEqual(expect.arrayContaining([
       expect.objectContaining({ level: "info", message: expect.stringContaining("3MF") }),
     ]));
+  });
+
+  it("reports QR islands and validates generated mesh topology", () => {
+    const qr = createQrCode("https://example.com", "HIGH");
+    const islands = qr3dIslandStats(qr);
+    const mesh = validateQr3dMesh(qr, { reliefMode: "raised" });
+    expect(islands.count).toBeGreaterThan(0);
+    expect(islands.smallestCells).toBeGreaterThan(0);
+    expect(mesh.degenerateFacets).toBe(0);
+    expect(mesh.boundaryEdges + mesh.nonManifoldEdges).toBeGreaterThan(0);
   });
 });

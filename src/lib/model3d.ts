@@ -48,6 +48,13 @@ export interface Qr3dPrintabilityWarning {
   message: string;
 }
 
+export interface Qr3dMeshValidation {
+  watertight: boolean;
+  boundaryEdges: number;
+  nonManifoldEdges: number;
+  degenerateFacets: number;
+}
+
 interface Vertex {
   x: number;
   y: number;
@@ -91,12 +98,40 @@ export function getQr3dPrintabilityWarnings(qr: NayukiQrCode, options: Qr3dModel
   if (cellSize < 1.2) warnings.push({ level: "warning", message: `Small QR cells (${cellSize.toFixed(2)} mm). Use 100 mm or larger for easier printing.` });
   else if (cellSize < 1.5) warnings.push({ level: "warning", message: `Fine QR cells (${cellSize.toFixed(2)} mm). A 0.4 mm nozzle may soften detail.` });
   if (moduleHeight < 0.6) warnings.push({ level: "warning", message: "Raised height below 0.6 mm may disappear on the first layers." });
+  const islandStats = qr3dIslandStats(qr);
+  if (islandStats.smallestCells > 0 && cellSize * islandStats.smallestCells < 1.2) {
+    warnings.push({ level: "warning", message: `Smallest QR island is ${islandStats.smallestCells} cell${islandStats.smallestCells === 1 ? "" : "s"}; it may be fragile at this size.` });
+  }
   if (options.reliefMode === "engraved") warnings.push({ level: "info", message: "Engraved QR uses recessed floors; verify contrast and scan reliability after printing." });
   if (options.hasLogo) warnings.push({ level: "info", message: "Center logos are not represented in 3D exports." });
   if (options.stylized) warnings.push({ level: "info", message: "Decorative 2D module styling is simplified to square 3D cells." });
   if (options.profile === "laser-cnc") warnings.push({ level: "info", message: "Laser/CNC output is a geometric reference; verify tool diameter and depth separately." });
   warnings.push({ level: "info", message: "STL is single-material; use 3MF for Bambu material assignment or OBJ for Blender." });
   return warnings;
+}
+
+export function qr3dIslandStats(qr: NayukiQrCode): { count: number; smallestCells: number } {
+  const visited = Array.from({ length: qr.size }, () => Array<boolean>(qr.size).fill(false));
+  const sizes: number[] = [];
+  for (let y = 0; y < qr.size; y++) {
+    for (let x = 0; x < qr.size; x++) {
+      if (visited[y][x] || !qr.getModule(x, y)) continue;
+      const queue: Array<[number, number]> = [[x, y]];
+      visited[y][x] = true;
+      let size = 0;
+      while (queue.length > 0) {
+        const [currentX, currentY] = queue.pop()!;
+        size += 1;
+        for (const [nextX, nextY] of [[currentX - 1, currentY], [currentX + 1, currentY], [currentX, currentY - 1], [currentX, currentY + 1]] as Array<[number, number]>) {
+          if (nextX < 0 || nextY < 0 || nextX >= qr.size || nextY >= qr.size || visited[nextY][nextX] || !qr.getModule(nextX, nextY)) continue;
+          visited[nextY][nextX] = true;
+          queue.push([nextX, nextY]);
+        }
+      }
+      sizes.push(size);
+    }
+  }
+  return { count: sizes.length, smallestCells: sizes.length > 0 ? Math.min(...sizes) : 0 };
 }
 
 function optionValue<T extends keyof typeof DEFAULT_3D_OPTIONS>(options: Qr3dModelOptions, key: T): (typeof DEFAULT_3D_OPTIONS)[T] {
@@ -300,6 +335,38 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
   }
 
   return triangles;
+}
+
+function vertexKey(vertex: Vertex): string {
+  return `${number(vertex.x)},${number(vertex.y)},${number(vertex.z)}`;
+}
+
+export function validateQr3dMesh(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Qr3dMeshValidation {
+  const edgeCounts = new Map<string, number>();
+  let degenerateFacets = 0;
+  const addEdge = (a: Vertex, b: Vertex): void => {
+    const first = vertexKey(a);
+    const second = vertexKey(b);
+    const edge = first < second ? `${first}|${second}` : `${second}|${first}`;
+    edgeCounts.set(edge, (edgeCounts.get(edge) ?? 0) + 1);
+  };
+  for (const triangle of modelTriangles(qr, options)) {
+    const area = Math.hypot(...Object.values(normal(triangle.a, triangle.b, triangle.c))) > 0;
+    if (!area || (vertexKey(triangle.a) === vertexKey(triangle.b)) || (vertexKey(triangle.b) === vertexKey(triangle.c)) || (vertexKey(triangle.c) === vertexKey(triangle.a))) {
+      degenerateFacets += 1;
+      continue;
+    }
+    addEdge(triangle.a, triangle.b);
+    addEdge(triangle.b, triangle.c);
+    addEdge(triangle.c, triangle.a);
+  }
+  let boundaryEdges = 0;
+  let nonManifoldEdges = 0;
+  for (const count of edgeCounts.values()) {
+    if (count === 1) boundaryEdges += 1;
+    else if (count > 2) nonManifoldEdges += 1;
+  }
+  return { watertight: boundaryEdges === 0 && nonManifoldEdges === 0 && degenerateFacets === 0, boundaryEdges, nonManifoldEdges, degenerateFacets };
 }
 
 function normal(a: Vertex, b: Vertex, c: Vertex): Vertex {
