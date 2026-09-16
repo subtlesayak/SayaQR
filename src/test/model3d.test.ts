@@ -58,6 +58,16 @@ describe("3D QR exports", () => {
     expect(text).toContain("README.txt");
   });
 
+  it("keeps engraved 3MF base, module, and finder objects separate", async () => {
+    const qr = createQrCode("hello", "HIGH");
+    const blob = await threeMfBlob(qr, { reliefMode: "engraved" });
+    const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+    expect(text).toContain('name="Coaster base"');
+    expect(text).toContain('name="QR modules"');
+    expect(text).toContain('name="Finder modules"');
+    expect((text.match(/<object id=/g) ?? []).length).toBe(3);
+  });
+
   it("creates Blender-ready OBJ and MTL files", async () => {
     const qr = createQrCode("hello", "HIGH");
     const obj = qrToObj(qr, { moduleColor: "#123456", finderColor: "#654321", baseColor: "#FFFFFF" }, "test.mtl");
@@ -89,6 +99,9 @@ describe("3D QR exports", () => {
     ]));
     expect(getQr3dPrintabilityWarnings(qr, { sizeMm: 100, quietZone: 4, moduleHeightMm: 1.2 })).toEqual(expect.arrayContaining([
       expect.objectContaining({ level: "info", message: expect.stringContaining("3MF") }),
+    ]));
+    expect(getQr3dPrintabilityWarnings(qr, { reliefMode: "engraved", baseHeightMm: 0.8, moduleHeightMm: 1.2 })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ level: "warning", message: expect.stringContaining("underside stays flat") }),
     ]));
   });
 

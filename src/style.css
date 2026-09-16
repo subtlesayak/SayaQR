@@ -144,6 +144,24 @@ h2 {
   font-weight: 750;
 }
 
+.footer-support {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid #d8b400;
+  border-radius: 6px;
+  background: #ffdd00;
+  color: #000000;
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.footer-support:hover {
+  background: #f5cf00;
+}
+
 .brand p {
   font-size: 0.95rem;
   font-weight: 650;
@@ -1785,6 +1803,11 @@ input[type="file"] {
 
 .secondary-export-actions[data-count="2"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* The primary download action joins Copy and Share once QR output is ready. */
+.secondary-export-actions[data-count="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .primary-export,

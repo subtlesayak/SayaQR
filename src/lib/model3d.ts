@@ -11,6 +11,7 @@ export interface Qr3dModelOptions {
   sizeMm?: number;
   baseHeightMm?: number;
   moduleHeightMm?: number;
+  undersideThicknessMm?: number;
   quietZone?: number;
   moduleColor?: string;
   finderColor?: string;
@@ -79,6 +80,7 @@ const DEFAULT_3D_OPTIONS = {
   sizeMm: 100,
   baseHeightMm: 2,
   moduleHeightMm: 1.2,
+  undersideThicknessMm: 0.4,
   quietZone: 4,
   moduleColor: "#0F172A",
   finderColor: "#0F172A",
@@ -94,10 +96,17 @@ export function qr3dCellSizeMm(qr: NayukiQrCode, options: Qr3dModelOptions = {})
 export function getQr3dPrintabilityWarnings(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Qr3dPrintabilityWarning[] {
   const cellSize = qr3dCellSizeMm(qr, options);
   const moduleHeight = Math.max(0.4, optionValue(options, "moduleHeightMm"));
+  const undersideThickness = Math.max(0.2, optionValue(options, "undersideThicknessMm"));
   const warnings: Qr3dPrintabilityWarning[] = [];
   if (cellSize < 1.2) warnings.push({ level: "warning", message: `Small QR cells (${cellSize.toFixed(2)} mm). Use 100 mm or larger for easier printing.` });
   else if (cellSize < 1.5) warnings.push({ level: "warning", message: `Fine QR cells (${cellSize.toFixed(2)} mm). A 0.4 mm nozzle may soften detail.` });
   if (moduleHeight < 0.6) warnings.push({ level: "warning", message: "Raised height below 0.6 mm may disappear on the first layers." });
+  if (undersideThickness > Math.max(0.2, Math.max(0.8, optionValue(options, "baseHeightMm")) - 0.2)) {
+    warnings.push({ level: "warning", message: "Bottom QR thickness is limited to keep a solid top layer." });
+  }
+  if (options.reliefMode === "engraved" && moduleHeight > Math.max(0.8, optionValue(options, "baseHeightMm"))) {
+    warnings.push({ level: "warning", message: "Engraving depth is limited by the base so the underside stays flat." });
+  }
   const islandStats = qr3dIslandStats(qr);
   if (islandStats.smallestCells > 0 && cellSize * islandStats.smallestCells < 1.2) {
     warnings.push({ level: "warning", message: `Smallest QR island is ${islandStats.smallestCells} cell${islandStats.smallestCells === 1 ? "" : "s"}; it may be fragile at this size.` });
@@ -172,29 +181,35 @@ function isFinderArea(x: number, y: number, size: number): boolean {
   return (x < 7 && y < 7) || (x >= size - 7 && y < 7) || (x < 7 && y >= size - 7);
 }
 
-function addBaseShell(triangles: Triangle[], x: number, y: number, size: number, height: number, segments: number): void {
+function addBaseShell(triangles: Triangle[], x: number, y: number, size: number, height: number, segments: number, bottomZ: number): void {
   const x2 = x + size;
   const y2 = y + size;
-  const bottomLeft = { x, y, z: 0 };
-  const bottomRight = { x: x2, y, z: 0 };
-  const topRight = { x: x2, y: y2, z: 0 };
-  const topLeft = { x, y: y2, z: 0 };
-  // The top is intentionally omitted. It is tiled later around raised QR cells
-  // so no hidden coplanar faces overlap the module bottoms.
-  addQuad(triangles, bottomLeft, bottomRight, topRight, topLeft, 0);
+  // Keep each exported material region as a closed solid. The raised/recessed
+  // parts sit on this base surface and remain separate material bodies. The
+  // bottom plane is tiled separately so the underside can carry a flat QR
+  // material pattern without changing its z=0 profile.
   const step = size / segments;
   for (let index = 0; index < segments; index++) {
     const first = index * step;
     const second = (index + 1) * step;
-    addQuad(triangles, { x: x + first, y, z: 0 }, { x: x + first, y, z: height }, { x: x + second, y, z: height }, { x: x + second, y, z: 0 }, 0);
-    addQuad(triangles, { x: x + first, y: y + size, z: 0 }, { x: x + second, y: y + size, z: 0 }, { x: x + second, y: y + size, z: height }, { x: x + first, y: y + size, z: height }, 0);
-    addQuad(triangles, { x, y: y + first, z: 0 }, { x, y: y + second, z: 0 }, { x, y: y + second, z: height }, { x, y: y + first, z: height }, 0);
-    addQuad(triangles, { x: x + size, y: y + second, z: 0 }, { x: x + size, y: y + first, z: 0 }, { x: x + size, y: y + first, z: height }, { x: x + size, y: y + second, z: height }, 0);
+    addQuad(triangles, { x: x + first, y, z: bottomZ }, { x: x + first, y, z: height }, { x: x + second, y, z: height }, { x: x + second, y, z: bottomZ }, 0);
+    addQuad(triangles, { x: x + first, y: y + size, z: bottomZ }, { x: x + second, y: y + size, z: bottomZ }, { x: x + second, y: y + size, z: height }, { x: x + first, y: y + size, z: height }, 0);
+    addQuad(triangles, { x, y: y + first, z: bottomZ }, { x, y: y + second, z: bottomZ }, { x, y: y + second, z: height }, { x, y: y + first, z: height }, 0);
+    addQuad(triangles, { x: x + size, y: y + second, z: bottomZ }, { x: x + size, y: y + first, z: bottomZ }, { x: x + size, y: y + first, z: height }, { x: x + size, y: y + second, z: height }, 0);
   }
 }
 
 function addQuad(triangles: Triangle[], a: Vertex, b: Vertex, c: Vertex, d: Vertex, material: MaterialIndex): void {
   triangles.push({ a, b, c, material }, { a, b: c, c: d, material });
+}
+
+function addBox(triangles: Triangle[], x1: number, y1: number, x2: number, y2: number, z1: number, z2: number, material: MaterialIndex): void {
+  addQuad(triangles, { x: x1, y: y1, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x1, y: y2, z: z1 }, material);
+  addQuad(triangles, { x: x1, y: y2, z: z2 }, { x: x2, y: y2, z: z2 }, { x: x2, y: y1, z: z2 }, { x: x1, y: y1, z: z2 }, material);
+  addQuad(triangles, { x: x1, y: y1, z: z1 }, { x: x1, y: y2, z: z1 }, { x: x1, y: y2, z: z2 }, { x: x1, y: y1, z: z2 }, material);
+  addQuad(triangles, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x2, y: y1, z: z2 }, { x: x2, y: y2, z: z2 }, material);
+  addQuad(triangles, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, { x: x1, y: y1, z: z2 }, { x: x2, y: y1, z: z2 }, material);
+  addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y2, z: z2 }, { x: x1, y: y2, z: z2 }, material);
 }
 
 function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): Triangle[] {
@@ -203,9 +218,23 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
   const baseHeight = Math.max(0.8, optionValue(inputOptions, "baseHeightMm"));
   const moduleHeight = Math.max(0.4, optionValue(inputOptions, "moduleHeightMm"));
   const reliefMode = optionValue(inputOptions, "reliefMode");
+  // Keep engraved relief on the top side only. The underside is always a
+  // flat plane at z=0, even when the requested depth exceeds base thickness.
+  const reliefDepth = Math.min(moduleHeight, baseHeight);
   const cellSize = sizeMm / (qr.size + quietZone * 2);
   const origin = -sizeMm / 2;
   const baseGridSize = qr.size + quietZone * 2;
+  // Two typical 0.2 mm layers give the underside material region real
+  // printable volume for a 0.4 mm nozzle while keeping its outer face flush.
+  const undersideLayer = 0.4;
+  const undersideThickness = Math.min(
+    Math.max(0.2, optionValue(inputOptions, "undersideThicknessMm")),
+    Math.max(0.2, baseHeight - 0.2),
+  );
+  // A tiny overlap keeps raised material bodies attached after slicers merge
+  // the underside inlay and upper base. It is below normal layer resolution
+  // and does not change the finished outer dimensions.
+  const qrBodyBottom = Math.max(0, undersideThickness - 0.05);
   const triangles: Triangle[] = [];
 
   function cellMaterial(x: number, y: number): MaterialIndex | null {
@@ -213,10 +242,64 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
     return isFinderArea(x, y, qr.size) ? 2 : 1;
   }
 
-  addBaseShell(triangles, origin, origin, sizeMm, baseHeight, baseGridSize);
+  addBaseShell(triangles, origin, origin, sizeMm, baseHeight, baseGridSize, 0);
+
+  // Give the flat underside QR regions a printable inlay thickness. Their
+  // exposed surface remains at z=0, but slicers can no longer discard them
+  // as zero-thickness material objects.
+  for (let y = 0; y < baseGridSize; y++) {
+    for (let x = 0; x < baseGridSize; x++) {
+      const x1 = origin + x * cellSize;
+      const x2 = x1 + cellSize;
+      const y1 = origin + y * cellSize;
+      const y2 = y1 + cellSize;
+      const undersideMaterial = cellMaterial(x - quietZone, y - quietZone);
+      if (reliefMode === "engraved" && undersideMaterial !== null) {
+        // Engraved mode removes the dark QR material from the top entirely.
+        // Keep only the flat underside inlay. The space above it is left
+        // empty so the cavity is genuinely hollow instead of filled gray.
+        addBox(triangles, x1, y1, x2, y2, 0, undersideThickness, undersideMaterial);
+      } else if (reliefMode === "raised") {
+        addBox(triangles, x1, y1, x2, y2, 0, undersideThickness, undersideMaterial ?? 0);
+      }
+    }
+  }
+
+  // Engraved QR cells are voids above the underside inlay. Build the rest of
+  // the coaster as solid cell prisms so the removed modules do not get filled
+  // back in when a slicer repairs the outer shell.
+  if (reliefMode === "engraved") {
+    for (let y = 0; y < baseGridSize; y++) {
+      for (let x = 0; x < baseGridSize; x++) {
+        if (cellMaterial(x - quietZone, y - quietZone) !== null) continue;
+        const x1 = origin + x * cellSize;
+        const x2 = x1 + cellSize;
+        const y1 = origin + y * cellSize;
+        const y2 = y1 + cellSize;
+        addBox(triangles, x1, y1, x2, y2, 0, baseHeight, 0);
+      }
+    }
+  }
+
+  // Keep the base object independently watertight. The colored underside
+  // inlays sit against this plane as separate material bodies, but the base
+  // itself must still have a complete bottom so slicers do not fill its top
+  // cavities during repair.
+  for (let y = 0; y < baseGridSize; y++) {
+    for (let x = 0; x < baseGridSize; x++) {
+      if (reliefMode === "engraved" && cellMaterial(x - quietZone, y - quietZone) !== null) continue;
+      const x1 = origin + x * cellSize;
+      const x2 = x1 + cellSize;
+      const y1 = origin + y * cellSize;
+      const y2 = y1 + cellSize;
+      addQuad(triangles, { x: x1, y: y2, z: 0 }, { x: x2, y: y2, z: 0 }, { x: x2, y: y1, z: 0 }, { x: x1, y: y1, z: 0 }, 0);
+    }
+  }
 
   for (let y = 0; y < baseGridSize; y++) {
     for (let x = 0; x < baseGridSize; x++) {
+      // Leave the QR cells open so their recessed floors form a real cavity.
+      // Non-QR cells still receive the flat top surface of the coaster.
       if (cellMaterial(x - quietZone, y - quietZone) !== null) continue;
       const x1 = origin + x * cellSize;
       const x2 = x1 + cellSize;
@@ -242,6 +325,7 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
         const x2 = x1 + cellSize;
         const y1 = origin + (quietZone + y) * cellSize;
         const y2 = y1 + cellSize;
+        const surfaceMaterial: MaterialIndex = reliefMode === "engraved" ? 0 : material;
         if (reliefMode === "raised") {
           addQuad(
             triangles,
@@ -249,38 +333,41 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
             { x: x2, y: y1, z: baseHeight + moduleHeight },
             { x: x2, y: y2, z: baseHeight + moduleHeight },
             { x: x1, y: y2, z: baseHeight + moduleHeight },
-            material,
+            surfaceMaterial,
           );
           addQuad(
             triangles,
-            { x: x1, y: y2, z: baseHeight },
-            { x: x2, y: y2, z: baseHeight },
-            { x: x2, y: y1, z: baseHeight },
-            { x: x1, y: y1, z: baseHeight },
-            material,
+            { x: x1, y: y2, z: qrBodyBottom },
+            { x: x2, y: y2, z: qrBodyBottom },
+            { x: x2, y: y1, z: qrBodyBottom },
+            { x: x1, y: y1, z: qrBodyBottom },
+            surfaceMaterial,
           );
         } else {
           addQuad(
             triangles,
-            { x: x1, y: y2, z: baseHeight - moduleHeight },
-            { x: x2, y: y2, z: baseHeight - moduleHeight },
-            { x: x2, y: y1, z: baseHeight - moduleHeight },
-            { x: x1, y: y1, z: baseHeight - moduleHeight },
-            material,
+            { x: x1, y: y2, z: baseHeight - reliefDepth },
+            { x: x2, y: y2, z: baseHeight - reliefDepth },
+            { x: x2, y: y1, z: baseHeight - reliefDepth },
+            { x: x1, y: y1, z: baseHeight - reliefDepth },
+            surfaceMaterial,
           );
         }
 
-        const z1 = reliefMode === "engraved" ? baseHeight - moduleHeight : baseHeight;
+        const z1 = reliefMode === "engraved" ? baseHeight - reliefDepth : qrBodyBottom;
         const z2 = reliefMode === "engraved" ? baseHeight : baseHeight + moduleHeight;
         const addSide = (neighbor: MaterialIndex | null, side: "top" | "right" | "bottom" | "left"): void => {
           // At a material boundary one shared wall is enough. Finder walls
           // own the boundary so the combined multi-material mesh has no
           // duplicate coplanar walls.
+          // At a finder/module boundary, let the finder side own the shared
+          // wall. This prevents duplicate coplanar faces and keeps the
+          // engraved cavity manifold when slicers merge the material parts.
           if (neighbor === material || (neighbor !== null && material !== 2)) return;
-          if (side === "top") addQuad(triangles, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, { x: x1, y: y1, z: z2 }, { x: x2, y: y1, z: z2 }, material);
-          if (side === "right") addQuad(triangles, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x2, y: y1, z: z2 }, { x: x2, y: y2, z: z2 }, material);
-          if (side === "bottom") addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y2, z: z2 }, { x: x1, y: y2, z: z2 }, material);
-          if (side === "left") addQuad(triangles, { x: x1, y: y1, z: z1 }, { x: x1, y: y2, z: z1 }, { x: x1, y: y2, z: z2 }, { x: x1, y: y1, z: z2 }, material);
+          if (side === "top") addQuad(triangles, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, { x: x1, y: y1, z: z2 }, { x: x2, y: y1, z: z2 }, surfaceMaterial);
+          if (side === "right") addQuad(triangles, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x2, y: y1, z: z2 }, { x: x2, y: y2, z: z2 }, surfaceMaterial);
+          if (side === "bottom") addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y2, z: z2 }, { x: x1, y: y2, z: z2 }, surfaceMaterial);
+          if (side === "left") addQuad(triangles, { x: x1, y: y1, z: z1 }, { x: x1, y: y2, z: z1 }, { x: x1, y: y2, z: z2 }, { x: x1, y: y1, z: z2 }, surfaceMaterial);
         };
         addSide(cellMaterial(x, y - 1), "top");
         addSide(cellMaterial(x + 1, y), "right");
@@ -300,10 +387,10 @@ function vertexKey(vertex: Vertex): string {
 export function validateQr3dMesh(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Qr3dMeshValidation {
   const edgeCounts = new Map<string, number>();
   let degenerateFacets = 0;
-  const addEdge = (a: Vertex, b: Vertex): void => {
+  const addEdge = (a: Vertex, b: Vertex, material: MaterialIndex): void => {
     const first = vertexKey(a);
     const second = vertexKey(b);
-    const edge = first < second ? `${first}|${second}` : `${second}|${first}`;
+    const edge = first < second ? `${material}:${first}|${second}` : `${material}:${second}|${first}`;
     edgeCounts.set(edge, (edgeCounts.get(edge) ?? 0) + 1);
   };
   for (const triangle of modelTriangles(qr, options)) {
@@ -312,9 +399,9 @@ export function validateQr3dMesh(qr: NayukiQrCode, options: Qr3dModelOptions = {
       degenerateFacets += 1;
       continue;
     }
-    addEdge(triangle.a, triangle.b);
-    addEdge(triangle.b, triangle.c);
-    addEdge(triangle.c, triangle.a);
+    addEdge(triangle.a, triangle.b, triangle.material);
+    addEdge(triangle.b, triangle.c, triangle.material);
+    addEdge(triangle.c, triangle.a, triangle.material);
   }
   let boundaryEdges = 0;
   let nonManifoldEdges = 0;
@@ -454,7 +541,9 @@ export function qr3dReadme(options: Qr3dModelOptions = {}): string {
     `Profile: ${profile.name}`,
     `Size: ${optionValue(options, "sizeMm")} mm square`,
     `Base: ${optionValue(options, "baseHeightMm")} mm`,
-    `Raised QR: ${optionValue(options, "moduleHeightMm")} mm`,
+    `${options.reliefMode === "engraved" ? "Engraved QR depth" : "Raised QR height"}: ${optionValue(options, "moduleHeightMm")} mm`,
+    options.reliefMode === "engraved" ? "Engraved geometry is one coherent base body with a flat underside." : "The underside is flat; QR modules are raised above the base.",
+    "The underside has a flush 0.4 mm QR inlay for multi-material 3MF workflows; STL cannot preserve colors.",
     "STL is single-material. 3MF contains separate base, module, and finder parts.",
     "OBJ coordinates are encoded in metres for Blender's default importer and include an MTL file.",
     "Check the exported model in your slicer before printing.",
@@ -481,7 +570,7 @@ function build3mfModel(qr: NayukiQrCode, options: Qr3dModelOptions): string {
     normalizeColor(optionValue(options, "finderColor")),
   ];
 
-  function objectXml(material: MaterialIndex): string {
+  function objectXml(material: MaterialIndex, includeAllTriangles = false): string {
     const vertices: string[] = [];
     const triangleXml: string[] = [];
     const vertexKeys = new Map<string, number>();
@@ -497,9 +586,12 @@ function build3mfModel(qr: NayukiQrCode, options: Qr3dModelOptions): string {
     }
 
     for (const triangle of triangles) {
-      if (triangle.material !== material) continue;
+      // Engraved models are one coherent base body. Keep the underside color
+      // faces in that same object so slicers do not discard them as detached
+      // zero-thickness parts and then repair the cavity into a flat lid.
+      if (!includeAllTriangles && triangle.material !== material) continue;
       triangleXml.push(
-        `<triangle v1="${vertexIndex(triangle.a)}" v2="${vertexIndex(triangle.b)}" v3="${vertexIndex(triangle.c)}" pid="1" p1="${material}" p2="${material}" p3="${material}"/>`,
+        `<triangle v1="${vertexIndex(triangle.a)}" v2="${vertexIndex(triangle.b)}" v3="${vertexIndex(triangle.c)}" pid="1" p1="${includeAllTriangles ? triangle.material : material}" p2="${includeAllTriangles ? triangle.material : material}" p3="${includeAllTriangles ? triangle.material : material}"/>`,
       );
     }
 

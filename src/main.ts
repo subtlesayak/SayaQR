@@ -430,7 +430,8 @@ function renderApp(): void {
               <label class="field field-wide"><span>Print profile</span><select id="model3dProfile">${QR3D_PRINT_PROFILES.map((profile) => `<option value="${profile.id}"${profile.id === "bambu-ams" ? " selected" : ""}>${profile.name}</option>`).join("")}</select><small id="model3dProfileHint" class="control-hint">${QR3D_PRINT_PROFILES[0].description}</small></label>
               <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
               <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
-              <label class="field"><span>Raised height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
+              <label class="field"><span>Top relief height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
+              <label class="field"><span>Bottom QR thickness <strong id="model3dBottomValue">0.4 mm · 2 layers</strong></span><input id="model3dBottom" type="range" min="0.2" max="1" step="0.2" value="0.4" /></label>
               <label class="field"><span>Relief</span><select id="model3dReliefMode"><option value="raised" selected>Raised QR</option><option value="engraved">Engraved QR</option></select></label>
               <label class="field field-wide"><span>Color strategy</span><select id="model3dColorStrategy"><option value="single">Single color</option><option value="two">Base + QR two-color</option><option value="three" selected>Base + modules + finders</option></select></label>
             </div>
@@ -560,6 +561,7 @@ function renderApp(): void {
         Built by <a href="https://subtlesayak.github.io/" target="_blank" rel="noreferrer">Subtle Sayak</a>. <a href="https://github.com/subtlesayak/SayaQR" target="_blank" rel="noreferrer">GitHub</a>.
         QR encoding by <a href="https://www.nayuki.io/page/qr-code-generator-library" target="_blank" rel="noreferrer">Nayuki's MIT-licensed QR Code generator</a>.
       </p>
+      <a class="footer-support" href="https://www.buymeacoffee.com/subtlesayak" target="_blank" rel="noopener noreferrer">Buy me a coffee</a>
       <p class="footer-version">SayaQR v${APP_VERSION}</p>
     </footer>
   `;
@@ -1029,6 +1031,7 @@ function updateSliderLabels(): void {
   const logoScale = Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? "0.18");
   const model3dBase = Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? "2");
   const model3dHeight = Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? "1.2");
+  const model3dBottom = Number(document.querySelector<HTMLInputElement>("#model3dBottom")?.value ?? "0.4");
   const model3dPitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? "35");
   const model3dYaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? "-35");
   document.querySelector("#marginValue")!.textContent = margin;
@@ -1037,6 +1040,7 @@ function updateSliderLabels(): void {
   document.querySelector("#logoSizeValue")!.textContent = `${Math.round(logoScale * 100)}%`;
   document.querySelector("#model3dBaseValue")!.textContent = `${model3dBase.toFixed(1)} mm`;
   document.querySelector("#model3dHeightValue")!.textContent = `${model3dHeight.toFixed(1)} mm`;
+  document.querySelector("#model3dBottomValue")!.textContent = `${model3dBottom.toFixed(1)} mm · ${Math.round(model3dBottom / 0.2)} layers`;
   document.querySelector("#model3dPitchValue")!.textContent = `${model3dPitch}°`;
   document.querySelector("#model3dYawValue")!.textContent = `${model3dYaw}°`;
 }
@@ -1056,6 +1060,7 @@ function get3dOptions(renderOptions: QrRenderOptions) {
     sizeMm: Number(document.querySelector<HTMLSelectElement>("#model3dSize")?.value ?? 100),
     baseHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? 2),
     moduleHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? 1.2),
+    undersideThicknessMm: Number(document.querySelector<HTMLInputElement>("#model3dBottom")?.value ?? 0.4),
   };
 }
 
@@ -1487,6 +1492,7 @@ function updateExportAvailability(available: boolean): void {
   const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
   if (copyButton) copyButton.disabled = !available;
   if (shareButton) shareButton.disabled = !available;
+  updateNativeActionLayout();
 }
 
 function updateMobilePreview(markup: string, statusText: string, state: "ready" | "empty" | "error"): void {
