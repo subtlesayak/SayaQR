@@ -224,9 +224,9 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
   const cellSize = sizeMm / (qr.size + quietZone * 2);
   const origin = -sizeMm / 2;
   const baseGridSize = qr.size + quietZone * 2;
-  // Two typical 0.2 mm layers give the underside material region real
-  // printable volume for a 0.4 mm nozzle while keeping its outer face flush.
-  const undersideLayer = 0.4;
+  // Raised mode can use a real underside inlay for multi-material exports.
+  // Engraved mode deliberately has no underside material: QR cells are
+  // through-holes so the surface beneath the coaster shows through.
   const undersideThickness = Math.min(
     Math.max(0.2, optionValue(inputOptions, "undersideThicknessMm")),
     Math.max(0.2, baseHeight - 0.2),
@@ -244,9 +244,8 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
 
   addBaseShell(triangles, origin, origin, sizeMm, baseHeight, baseGridSize, 0);
 
-  // Give the flat underside QR regions a printable inlay thickness. Their
-  // exposed surface remains at z=0, but slicers can no longer discard them
-  // as zero-thickness material objects.
+  // Raised mode gets a printable underside inlay. Engraved mode intentionally
+  // skips QR cells entirely so they remain open through-holes.
   for (let y = 0; y < baseGridSize; y++) {
     for (let x = 0; x < baseGridSize; x++) {
       const x1 = origin + x * cellSize;
@@ -254,20 +253,14 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
       const y1 = origin + y * cellSize;
       const y2 = y1 + cellSize;
       const undersideMaterial = cellMaterial(x - quietZone, y - quietZone);
-      if (reliefMode === "engraved" && undersideMaterial !== null) {
-        // Engraved mode removes the dark QR material from the top entirely.
-        // Keep only the flat underside inlay. The space above it is left
-        // empty so the cavity is genuinely hollow instead of filled gray.
-        addBox(triangles, x1, y1, x2, y2, 0, undersideThickness, undersideMaterial);
-      } else if (reliefMode === "raised") {
+      if (reliefMode === "raised") {
         addBox(triangles, x1, y1, x2, y2, 0, undersideThickness, undersideMaterial ?? 0);
       }
     }
   }
 
-  // Engraved QR cells are voids above the underside inlay. Build the rest of
-  // the coaster as solid cell prisms so the removed modules do not get filled
-  // back in when a slicer repairs the outer shell.
+  // Engraved QR cells are true through-holes. Build only the non-QR cells as
+  // solid prisms so the removed modules cannot be filled during repair.
   if (reliefMode === "engraved") {
     for (let y = 0; y < baseGridSize; y++) {
       for (let x = 0; x < baseGridSize; x++) {
@@ -281,10 +274,8 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
     }
   }
 
-  // Keep the base object independently watertight. The colored underside
-  // inlays sit against this plane as separate material bodies, but the base
-  // itself must still have a complete bottom so slicers do not fill its top
-  // cavities during repair.
+  // Keep the base object closed around the perimeter. QR cells stay open in
+  // engraved mode so there is no bottom face for the slicer to fill.
   for (let y = 0; y < baseGridSize; y++) {
     for (let x = 0; x < baseGridSize; x++) {
       if (reliefMode === "engraved" && cellMaterial(x - quietZone, y - quietZone) !== null) continue;
@@ -341,15 +332,6 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
             { x: x2, y: y2, z: qrBodyBottom },
             { x: x2, y: y1, z: qrBodyBottom },
             { x: x1, y: y1, z: qrBodyBottom },
-            surfaceMaterial,
-          );
-        } else {
-          addQuad(
-            triangles,
-            { x: x1, y: y2, z: baseHeight - reliefDepth },
-            { x: x2, y: y2, z: baseHeight - reliefDepth },
-            { x: x2, y: y1, z: baseHeight - reliefDepth },
-            { x: x1, y: y1, z: baseHeight - reliefDepth },
             surfaceMaterial,
           );
         }
@@ -542,8 +524,8 @@ export function qr3dReadme(options: Qr3dModelOptions = {}): string {
     `Size: ${optionValue(options, "sizeMm")} mm square`,
     `Base: ${optionValue(options, "baseHeightMm")} mm`,
     `${options.reliefMode === "engraved" ? "Engraved QR depth" : "Raised QR height"}: ${optionValue(options, "moduleHeightMm")} mm`,
-    options.reliefMode === "engraved" ? "Engraved geometry is one coherent base body with a flat underside." : "The underside is flat; QR modules are raised above the base.",
-    "The underside has a flush 0.4 mm QR inlay for multi-material 3MF workflows; STL cannot preserve colors.",
+    options.reliefMode === "engraved" ? "Engraved QR cells are through-holes; the surface beneath the coaster shows through." : "The underside is flat; QR modules are raised above the base.",
+    options.reliefMode === "engraved" ? "Engraved exports have no bottom QR material; STL and OBJ preserve the openings." : "Raised exports can include a flush underside QR inlay for multi-material 3MF workflows; STL cannot preserve colors.",
     "STL is single-material. 3MF contains separate base, module, and finder parts.",
     "OBJ coordinates are encoded in metres for Blender's default importer and include an MTL file.",
     "Check the exported model in your slicer before printing.",
