@@ -975,6 +975,32 @@ input[type="file"] {
   color: #9a3412;
 }
 
+.model3d-preview-wrap {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #d7e1ec;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.model3d-preview-wrap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.model3d-dimensions {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .batch-file-drop {
   position: relative;
   cursor: pointer;

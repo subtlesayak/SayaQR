@@ -196,6 +196,7 @@ let logoAutoApplied = false;
 let logoAutoSuppressedFor = "";
 let currentPayload = "";
 let currentSvg = "";
+let selected3dFormat: "" | "stl" | "3mf" | "obj" = "";
 let batchData: CsvData | null = null;
 let batchValidation: BatchValidationResult | null = null;
 let batchGenerating = false;
@@ -423,11 +424,17 @@ function renderApp(): void {
           <summary>3D coaster export</summary>
           <div class="disclosure-body model3d-settings">
               <p class="control-hint">Raised QR coaster in millimetres. The default is a cup-coaster size.</p>
-              <div class="model3d-settings-grid">
-                <label class="field field-wide"><span>Print profile</span><select id="model3dProfile">${QR3D_PRINT_PROFILES.map((profile) => `<option value="${profile.id}"${profile.id === "bambu-ams" ? " selected" : ""}>${profile.name}</option>`).join("")}</select><small id="model3dProfileHint" class="control-hint">${QR3D_PRINT_PROFILES[0].description}</small></label>
-                <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
+            <div class="model3d-settings-grid">
+              <label class="field field-wide"><span>Print profile</span><select id="model3dProfile">${QR3D_PRINT_PROFILES.map((profile) => `<option value="${profile.id}"${profile.id === "bambu-ams" ? " selected" : ""}>${profile.name}</option>`).join("")}</select><small id="model3dProfileHint" class="control-hint">${QR3D_PRINT_PROFILES[0].description}</small></label>
+              <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
               <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
               <label class="field"><span>Raised height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
+              <label class="field"><span>Preview pitch <strong id="model3dPitchValue">35°</strong></span><input id="model3dPitch" type="range" min="15" max="75" value="35" /></label>
+              <label class="field"><span>Preview yaw <strong id="model3dYawValue">-35°</strong></span><input id="model3dYaw" type="range" min="-180" max="180" value="-35" /></label>
+            </div>
+            <div id="model3dPreviewPanel" class="model3d-preview-wrap" hidden>
+              <canvas id="model3dPreview" width="720" height="420" aria-label="Isometric 3D QR coaster preview"></canvas>
+              <span id="model3dDimensions" class="model3d-dimensions" aria-live="polite">100 × 100 × 3.2 mm</span>
             </div>
             <p id="model3dGuidance" class="model3d-guidance" aria-live="polite">Select a 3D format to see print guidance.</p>
           </div>
@@ -808,6 +815,8 @@ const DESIGN_CONTROL_IDS = new Set([
   "model3dBase",
   "model3dHeight",
   "model3dProfile",
+  "model3dPitch",
+  "model3dYaw",
 ]);
 
 function readDesignPreferencesFromControls(): DesignPreferences {
@@ -1004,12 +1013,16 @@ function updateSliderLabels(): void {
   const logoScale = Number(document.querySelector<HTMLInputElement>("#logoScale")?.value ?? "0.18");
   const model3dBase = Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? "2");
   const model3dHeight = Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? "1.2");
+  const model3dPitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? "35");
+  const model3dYaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? "-35");
   document.querySelector("#marginValue")!.textContent = margin;
   document.querySelector("#moduleSizeValue")!.textContent = moduleSize;
   document.querySelector("#roundedValue")!.textContent = `${Math.round(rounded * 100)}%`;
   document.querySelector("#logoSizeValue")!.textContent = `${Math.round(logoScale * 100)}%`;
   document.querySelector("#model3dBaseValue")!.textContent = `${model3dBase.toFixed(1)} mm`;
   document.querySelector("#model3dHeightValue")!.textContent = `${model3dHeight.toFixed(1)} mm`;
+  document.querySelector("#model3dPitchValue")!.textContent = `${model3dPitch}°`;
+  document.querySelector("#model3dYawValue")!.textContent = `${model3dYaw}°`;
 }
 
 function get3dOptions(renderOptions: QrRenderOptions) {
@@ -1050,6 +1063,83 @@ function update3dProfile(): void {
   const hint = document.querySelector<HTMLElement>("#model3dProfileHint");
   if (hint) hint.textContent = `${preset.description} ${preset.materialNote}`;
   updateSliderLabels();
+}
+
+function draw3dPreview(): void {
+  const panel = document.querySelector<HTMLElement>("#model3dPreviewPanel");
+  const canvas = document.querySelector<HTMLCanvasElement>("#model3dPreview");
+  if (!panel || panel.hidden || !canvas || !currentPayload.trim()) return;
+  const renderOptions = getRenderOptions();
+  const modelOptions = get3dOptions(renderOptions);
+  const qr = createQrCode(currentPayload, renderOptions.ecc);
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const width = canvas.width;
+  const height = canvas.height;
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "#f7fafc";
+  context.fillRect(0, 0, width, height);
+
+  const pitch = (Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? 35) * Math.PI) / 180;
+  const yaw = (Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? -35) * Math.PI) / 180;
+  const sinYaw = Math.sin(yaw);
+  const cosYaw = Math.cos(yaw);
+  const sinPitch = Math.sin(pitch);
+  const cosPitch = Math.cos(pitch);
+  const totalCells = qr.size + Math.floor(modelOptions.quietZone ?? 4) * 2;
+  const cell = 1 / totalCells;
+  const scale = Math.min(width, height) * 0.72;
+  const project = (x: number, y: number, z: number): [number, number] => {
+    const rotatedX = x * cosYaw - y * sinYaw;
+    const rotatedY = x * sinYaw + y * cosYaw;
+    return [width / 2 + rotatedX * scale, height / 2 + rotatedY * sinPitch * scale - z * cosPitch * scale];
+  };
+  const point = (x: number, y: number, z: number): [number, number] => project(x - 0.5, y - 0.5, z);
+  const polygon = (points: Array<[number, number]>, fill: string): void => {
+    context.beginPath();
+    context.moveTo(points[0][0], points[0][1]);
+    for (const [x, y] of points.slice(1)) context.lineTo(x, y);
+    context.closePath();
+    context.fillStyle = fill;
+    context.fill();
+    context.strokeStyle = "rgba(15, 23, 42, 0.16)";
+    context.lineWidth = 1;
+    context.stroke();
+  };
+  const slabDepth = Math.max(0.012, (modelOptions.baseHeightMm ?? 2) / (modelOptions.sizeMm ?? 100));
+  const relief = Math.max(0.004, (modelOptions.moduleHeightMm ?? 1.2) / (modelOptions.sizeMm ?? 100));
+  const base = [point(0, 0, 0), point(1, 0, 0), point(1, 1, 0), point(0, 1, 0)];
+  const baseTop = [point(0, 0, slabDepth), point(1, 0, slabDepth), point(1, 1, slabDepth), point(0, 1, slabDepth)];
+  polygon([base[0], base[1], base[2], base[3]], "#cbd5e1");
+  polygon([base[0], base[1], baseTop[1], baseTop[0]], "#94a3b8");
+  polygon([base[1], base[2], baseTop[2], baseTop[1]], "#64748b");
+  polygon(baseTop, modelOptions.baseColor ?? "#ffffff");
+
+  for (let y = 0; y < qr.size; y++) {
+    for (let x = 0; x < qr.size; x++) {
+      if (!qr.getModule(x, y)) continue;
+      const left = (x + (modelOptions.quietZone ?? 4)) * cell;
+      const top = (y + (modelOptions.quietZone ?? 4)) * cell;
+      const right = left + cell;
+      const bottom = top + cell;
+      const z = modelOptions.reliefMode === "engraved" ? slabDepth - relief : slabDepth + relief;
+      const fill = isFinderPreviewCell(x, y, qr.size) ? (modelOptions.finderColor ?? "#0f172a") : (modelOptions.moduleColor ?? "#0f172a");
+      polygon([point(left, top, z), point(right, top, z), point(right, bottom, z), point(left, bottom, z)], fill);
+    }
+  }
+  const dimensions = document.querySelector<HTMLElement>("#model3dDimensions");
+  if (dimensions) dimensions.textContent = `${modelOptions.sizeMm ?? 100} × ${modelOptions.sizeMm ?? 100} × ${((modelOptions.baseHeightMm ?? 2) + (modelOptions.moduleHeightMm ?? 1.2)).toFixed(1)} mm`;
+}
+
+function update3dPreviewVisibility(format: string): void {
+  selected3dFormat = format === "stl" || format === "3mf" || format === "obj" ? format : "";
+  const panel = document.querySelector<HTMLElement>("#model3dPreviewPanel");
+  if (panel) panel.hidden = !selected3dFormat;
+  if (selected3dFormat) draw3dPreview();
+}
+
+function isFinderPreviewCell(x: number, y: number, size: number): boolean {
+  return (x < 7 && y < 7) || (x >= size - 7 && y < 7) || (x < 7 && y >= size - 7);
 }
 
 function updateLogoStrokeColorVisibility(): void {
@@ -1322,6 +1412,7 @@ function updateQr(): void {
   const fields = collectPayloadFields();
   currentPayload = formatPayload(currentMode, fields);
   update3dGuidance();
+  draw3dPreview();
   const previewZone = document.querySelector<HTMLElement>(".preview-zone");
   if (previewZone) previewZone.dataset.contentState = currentPayload.trim() ? "ready" : "empty";
   output.value = currentPayload;
@@ -1758,6 +1849,7 @@ function wireEvents(): void {
     const exportButton = target.closest<HTMLElement>("[data-export]");
     const exportFormat = exportButton?.dataset.export;
     if (exportFormat) {
+      update3dPreviewVisibility(exportFormat);
       setMobileExportMenu(false);
       void exportCurrent(exportFormat);
       return;

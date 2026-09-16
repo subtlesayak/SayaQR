@@ -4,6 +4,8 @@ import { createZip, type ZipInputFile } from "./zip";
 
 export interface Qr3dModelOptions {
   profile?: Qr3dPrintProfile;
+  reliefMode?: "raised" | "engraved";
+  colorStrategy?: "single" | "two" | "three";
   sizeMm?: number;
   baseHeightMm?: number;
   moduleHeightMm?: number;
@@ -61,6 +63,8 @@ type MaterialIndex = 0 | 1 | 2;
 
 const DEFAULT_3D_OPTIONS = {
   profile: "bambu-ams" as Qr3dPrintProfile,
+  reliefMode: "raised" as "raised" | "engraved",
+  colorStrategy: "three" as "single" | "two" | "three",
   sizeMm: 100,
   baseHeightMm: 2,
   moduleHeightMm: 1.2,
@@ -83,6 +87,7 @@ export function getQr3dPrintabilityWarnings(qr: NayukiQrCode, options: Qr3dModel
   if (cellSize < 1.2) warnings.push({ level: "warning", message: `Small QR cells (${cellSize.toFixed(2)} mm). Use 100 mm or larger for easier printing.` });
   else if (cellSize < 1.5) warnings.push({ level: "warning", message: `Fine QR cells (${cellSize.toFixed(2)} mm). A 0.4 mm nozzle may soften detail.` });
   if (moduleHeight < 0.6) warnings.push({ level: "warning", message: "Raised height below 0.6 mm may disappear on the first layers." });
+  if (options.reliefMode === "engraved") warnings.push({ level: "info", message: "Engraved QR uses recessed floors; verify contrast and scan reliability after printing." });
   if (options.profile === "laser-cnc") warnings.push({ level: "info", message: "Laser/CNC output is a geometric reference; verify tool diameter and depth separately." });
   warnings.push({ level: "info", message: "STL is single-material; use 3MF for Bambu material assignment or OBJ for Blender." });
   return warnings;
@@ -156,6 +161,7 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
   const sizeMm = Math.max(30, optionValue(inputOptions, "sizeMm"));
   const baseHeight = Math.max(0.8, optionValue(inputOptions, "baseHeightMm"));
   const moduleHeight = Math.max(0.4, optionValue(inputOptions, "moduleHeightMm"));
+  const reliefMode = optionValue(inputOptions, "reliefMode");
   const cellSize = sizeMm / (qr.size + quietZone * 2);
   const origin = -sizeMm / 2;
   const triangles: Triangle[] = [];
@@ -236,22 +242,24 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
         const x2 = origin + (quietZone + x + width) * cellSize;
         const y1 = origin + (quietZone + y) * cellSize;
         const y2 = origin + (quietZone + y + height) * cellSize;
-        addQuad(
-          triangles,
-          { x: x1, y: y1, z: baseHeight + moduleHeight },
-          { x: x2, y: y1, z: baseHeight + moduleHeight },
-          { x: x2, y: y2, z: baseHeight + moduleHeight },
-          { x: x1, y: y2, z: baseHeight + moduleHeight },
-          material,
-        );
-        addQuad(
-          triangles,
-          { x: x1, y: y2, z: baseHeight },
-          { x: x2, y: y2, z: baseHeight },
-          { x: x2, y: y1, z: baseHeight },
-          { x: x1, y: y1, z: baseHeight },
-          material,
-        );
+        if (reliefMode === "raised") {
+          addQuad(
+            triangles,
+            { x: x1, y: y1, z: baseHeight + moduleHeight },
+            { x: x2, y: y1, z: baseHeight + moduleHeight },
+            { x: x2, y: y2, z: baseHeight + moduleHeight },
+            { x: x1, y: y2, z: baseHeight + moduleHeight },
+            material,
+          );
+          addQuad(
+            triangles,
+            { x: x1, y: y2, z: baseHeight },
+            { x: x2, y: y2, z: baseHeight },
+            { x: x2, y: y1, z: baseHeight },
+            { x: x1, y: y1, z: baseHeight },
+            material,
+          );
+        }
       }
     }
 
@@ -262,8 +270,12 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
         const x2 = x1 + cellSize;
         const y1 = origin + (quietZone + y) * cellSize;
         const y2 = y1 + cellSize;
-        const z1 = baseHeight;
-        const z2 = baseHeight + moduleHeight;
+        const z1 = reliefMode === "engraved" ? baseHeight - moduleHeight : baseHeight;
+        const z2 = reliefMode === "engraved" ? baseHeight : baseHeight + moduleHeight;
+
+        if (reliefMode === "engraved") {
+          addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, material);
+        }
 
         if (cellMaterial(x, y - 1) !== material) {
           addQuad(triangles, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, { x: x1, y: y1, z: z2 }, { x: x2, y: y1, z: z2 }, material);

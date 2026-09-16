@@ -72,6 +72,12 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('id="model3dBase"');
     expect(mainSource).toContain('id="model3dHeight"');
     expect(mainSource).toContain('id="model3dDetails"');
+    expect(mainSource).toContain('id="model3dProfile"');
+    expect(mainSource).toContain('id="model3dPreview"');
+    expect(mainSource).toContain('id="model3dPitch"');
+    expect(mainSource).toContain('id="model3dYaw"');
+    expect(mainSource).toContain('id="model3dPreviewPanel"');
+    expect(mainSource).toContain("update3dPreviewVisibility(exportFormat)");
     expect(mainSource.indexOf('id="model3dDetails"')).toBeGreaterThan(mainSource.indexOf('id="customizeDetails"'));
     expect(mainSource.indexOf('id="model3dDetails"')).toBeLessThan(mainSource.indexOf('class="tool-surface batch-zone'));
     expect(mainSource).toContain("registerServiceWorker();");
