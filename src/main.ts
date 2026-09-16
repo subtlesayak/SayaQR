@@ -1100,9 +1100,18 @@ function draw3dPreview(): void {
   const qr = createQrCode(currentPayload, renderOptions.ecc);
   const context = canvas.getContext("2d");
   if (!context) return;
-  const width = canvas.width;
-  const height = canvas.height;
+  const width = canvas.clientWidth || 720;
+  const height = Math.max(280, width * (420 / 720));
+  const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+  const backingWidth = Math.round(width * pixelRatio);
+  const backingHeight = Math.round(height * pixelRatio);
+  if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+    canvas.width = backingWidth;
+    canvas.height = backingHeight;
+  }
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   context.clearRect(0, 0, width, height);
+  context.imageSmoothingEnabled = true;
   context.fillStyle = "#f7fafc";
   context.fillRect(0, 0, width, height);
 

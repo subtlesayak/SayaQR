@@ -172,25 +172,25 @@ function isFinderArea(x: number, y: number, size: number): boolean {
   return (x < 7 && y < 7) || (x >= size - 7 && y < 7) || (x < 7 && y >= size - 7);
 }
 
-function addBaseShell(triangles: Triangle[], x: number, y: number, size: number, height: number): void {
+function addBaseShell(triangles: Triangle[], x: number, y: number, size: number, height: number, segments: number): void {
   const x2 = x + size;
   const y2 = y + size;
   const bottomLeft = { x, y, z: 0 };
   const bottomRight = { x: x2, y, z: 0 };
   const topRight = { x: x2, y: y2, z: 0 };
   const topLeft = { x, y: y2, z: 0 };
-  const upperLeft = { x, y, z: height };
-  const upperRight = { x: x2, y, z: height };
-  const upperTopRight = { x: x2, y: y2, z: height };
-  const upperTopLeft = { x, y: y2, z: height };
-
   // The top is intentionally omitted. It is tiled later around raised QR cells
   // so no hidden coplanar faces overlap the module bottoms.
   addQuad(triangles, bottomLeft, bottomRight, topRight, topLeft, 0);
-  addQuad(triangles, bottomLeft, upperLeft, upperRight, bottomRight, 0);
-  addQuad(triangles, bottomRight, upperRight, upperTopRight, topRight, 0);
-  addQuad(triangles, topRight, upperTopRight, upperTopLeft, topLeft, 0);
-  addQuad(triangles, topLeft, upperTopLeft, upperLeft, bottomLeft, 0);
+  const step = size / segments;
+  for (let index = 0; index < segments; index++) {
+    const first = index * step;
+    const second = (index + 1) * step;
+    addQuad(triangles, { x: x + first, y, z: 0 }, { x: x + first, y, z: height }, { x: x + second, y, z: height }, { x: x + second, y, z: 0 }, 0);
+    addQuad(triangles, { x: x + second, y, z: 0 }, { x: x + second, y, z: height }, { x: x + second, y: y + size, z: height }, { x: x + second, y: y + size, z: 0 }, 0);
+    addQuad(triangles, { x: x + second, y: y + size, z: 0 }, { x: x + second, y: y + size, z: height }, { x: x + first, y: y + size, z: height }, { x: x + first, y: y + size, z: 0 }, 0);
+    addQuad(triangles, { x: x + first, y: y + size, z: 0 }, { x: x + first, y: y + size, z: height }, { x: x + first, y, z: height }, { x: x + first, y, z: 0 }, 0);
+  }
 }
 
 function addQuad(triangles: Triangle[], a: Vertex, b: Vertex, c: Vertex, d: Vertex, material: MaterialIndex): void {
@@ -205,6 +205,7 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
   const reliefMode = optionValue(inputOptions, "reliefMode");
   const cellSize = sizeMm / (qr.size + quietZone * 2);
   const origin = -sizeMm / 2;
+  const baseGridSize = qr.size + quietZone * 2;
   const triangles: Triangle[] = [];
 
   function cellMaterial(x: number, y: number): MaterialIndex | null {
@@ -212,35 +213,15 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
     return isFinderArea(x, y, qr.size) ? 2 : 1;
   }
 
-  addBaseShell(triangles, origin, origin, sizeMm, baseHeight);
+  addBaseShell(triangles, origin, origin, sizeMm, baseHeight, baseGridSize);
 
-  const baseGridSize = qr.size + quietZone * 2;
-  const baseTopConsumed = Array.from({ length: baseGridSize }, () => Array<boolean>(baseGridSize).fill(false));
-  const baseCellIsRaised = (x: number, y: number): boolean => cellMaterial(x - quietZone, y - quietZone) !== null;
   for (let y = 0; y < baseGridSize; y++) {
     for (let x = 0; x < baseGridSize; x++) {
-      if (baseTopConsumed[y][x] || baseCellIsRaised(x, y)) continue;
-      let width = 1;
-      while (x + width < baseGridSize && !baseTopConsumed[y][x + width] && !baseCellIsRaised(x + width, y)) width += 1;
-      let height = 1;
-      while (y + height < baseGridSize) {
-        let rowMatches = true;
-        for (let column = x; column < x + width; column++) {
-          if (baseTopConsumed[y + height][column] || baseCellIsRaised(column, y + height)) {
-            rowMatches = false;
-            break;
-          }
-        }
-        if (!rowMatches) break;
-        height += 1;
-      }
-      for (let row = y; row < y + height; row++) {
-        for (let column = x; column < x + width; column++) baseTopConsumed[row][column] = true;
-      }
+      if (cellMaterial(x - quietZone, y - quietZone) !== null) continue;
       const x1 = origin + x * cellSize;
-      const x2 = origin + (x + width) * cellSize;
+      const x2 = x1 + cellSize;
       const y1 = origin + y * cellSize;
-      const y2 = origin + (y + height) * cellSize;
+      const y2 = y1 + cellSize;
       addQuad(
         triangles,
         { x: x1, y: y1, z: baseHeight },
@@ -253,36 +234,14 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
   }
 
   for (const material of [1, 2] as const) {
-    // Greedy rectangle meshing removes coplanar strip seams while keeping
-    // finder and module material boundaries distinct.
-    const consumed = Array.from({ length: qr.size }, () => Array<boolean>(qr.size).fill(false));
     for (let y = 0; y < qr.size; y++) {
       for (let x = 0; x < qr.size; x++) {
-        if (consumed[y][x] || cellMaterial(x, y) !== material) continue;
-
-        let width = 1;
-        while (x + width < qr.size && !consumed[y][x + width] && cellMaterial(x + width, y) === material) width += 1;
-        let height = 1;
-        while (y + height < qr.size) {
-          let rowMatches = true;
-          for (let column = x; column < x + width; column++) {
-            if (consumed[y + height][column] || cellMaterial(column, y + height) !== material) {
-              rowMatches = false;
-              break;
-            }
-          }
-          if (!rowMatches) break;
-          height += 1;
-        }
-
-        for (let row = y; row < y + height; row++) {
-          for (let column = x; column < x + width; column++) consumed[row][column] = true;
-        }
+        if (cellMaterial(x, y) !== material) continue;
 
         const x1 = origin + (quietZone + x) * cellSize;
-        const x2 = origin + (quietZone + x + width) * cellSize;
+        const x2 = x1 + cellSize;
         const y1 = origin + (quietZone + y) * cellSize;
-        const y2 = origin + (quietZone + y + height) * cellSize;
+        const y2 = y1 + cellSize;
         if (reliefMode === "raised") {
           addQuad(
             triangles,
@@ -313,61 +272,20 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
 
         const z1 = reliefMode === "engraved" ? baseHeight - moduleHeight : baseHeight;
         const z2 = reliefMode === "engraved" ? baseHeight : baseHeight + moduleHeight;
-        const addHorizontalBoundary = (neighborY: number, edgeY: number): void => {
-          let runStart = -1;
-          const finishRun = (runEnd: number): void => {
-            if (runStart < 0) return;
-            const runX1 = origin + (quietZone + runStart) * cellSize;
-            const runX2 = origin + (quietZone + runEnd) * cellSize;
-            addQuad(
-              triangles,
-              { x: runX1, y: edgeY, z: z1 },
-              { x: runX2, y: edgeY, z: z1 },
-              { x: runX2, y: edgeY, z: z2 },
-              { x: runX1, y: edgeY, z: z2 },
-              material,
-            );
-            runStart = -1;
-          };
-          for (let column = x; column < x + width; column++) {
-            if (cellMaterial(column, neighborY) !== material) {
-              if (runStart < 0) runStart = column;
-            } else {
-              finishRun(column);
-            }
-          }
-          finishRun(x + width);
+        const addSide = (neighbor: MaterialIndex | null, side: "top" | "right" | "bottom" | "left"): void => {
+          // At a material boundary one shared wall is enough. Finder walls
+          // own the boundary so the combined multi-material mesh has no
+          // duplicate coplanar walls.
+          if (neighbor === material || (neighbor !== null && material !== 2)) return;
+          if (side === "top") addQuad(triangles, { x: x2, y: y1, z: z1 }, { x: x1, y: y1, z: z1 }, { x: x1, y: y1, z: z2 }, { x: x2, y: y1, z: z2 }, material);
+          if (side === "right") addQuad(triangles, { x: x2, y: y2, z: z1 }, { x: x2, y: y1, z: z1 }, { x: x2, y: y1, z: z2 }, { x: x2, y: y2, z: z2 }, material);
+          if (side === "bottom") addQuad(triangles, { x: x1, y: y2, z: z1 }, { x: x2, y: y2, z: z1 }, { x: x2, y: y2, z: z2 }, { x: x1, y: y2, z: z2 }, material);
+          if (side === "left") addQuad(triangles, { x: x1, y: y1, z: z1 }, { x: x1, y: y2, z: z1 }, { x: x1, y: y2, z: z2 }, { x: x1, y: y1, z: z2 }, material);
         };
-        const addVerticalBoundary = (neighborX: number, edgeX: number): void => {
-          let runStart = -1;
-          const finishRun = (runEnd: number): void => {
-            if (runStart < 0) return;
-            const runY1 = origin + (quietZone + runStart) * cellSize;
-            const runY2 = origin + (quietZone + runEnd) * cellSize;
-            addQuad(
-              triangles,
-              { x: edgeX, y: runY1, z: z1 },
-              { x: edgeX, y: runY2, z: z1 },
-              { x: edgeX, y: runY2, z: z2 },
-              { x: edgeX, y: runY1, z: z2 },
-              material,
-            );
-            runStart = -1;
-          };
-          for (let row = y; row < y + height; row++) {
-            if (cellMaterial(neighborX, row) !== material) {
-              if (runStart < 0) runStart = row;
-            } else {
-              finishRun(row);
-            }
-          }
-          finishRun(y + height);
-        };
-
-        addHorizontalBoundary(y - 1, y1);
-        addHorizontalBoundary(y + height, y2);
-        addVerticalBoundary(x - 1, x1);
-        addVerticalBoundary(x + width, x2);
+        addSide(cellMaterial(x, y - 1), "top");
+        addSide(cellMaterial(x + 1, y), "right");
+        addSide(cellMaterial(x, y + 1), "bottom");
+        addSide(cellMaterial(x - 1, y), "left");
       }
     }
   }

@@ -1229,6 +1229,10 @@ input[type="file"] {
   display: block;
 }
 
+.preview-zone[data-preview-mode="3d"] {
+  display: block;
+}
+
 .preview-zone[data-content-state="empty"] .qr-preview {
   border-color: rgba(15, 23, 42, 0.08);
   background: #f8fafc;
