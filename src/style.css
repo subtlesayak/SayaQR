@@ -1798,6 +1798,13 @@ summary::-webkit-details-marker {
   color: #0f766e;
 }
 
+.alternate-format-actions button.is-selected {
+  border-color: #0f766e;
+  background: #e6fffa;
+  color: #0f766e;
+  box-shadow: inset 0 0 0 1px #0f766e;
+}
+
 button,
 .import-qr-action {
   transition-property: transform, background-color, border-color, color, box-shadow;

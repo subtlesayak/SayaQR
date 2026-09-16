@@ -23,7 +23,8 @@ describe("intent-first UI contract", () => {
       mainSource.indexOf('<div class="format-action-row"'),
       mainSource.indexOf('id="nativeExportActions"'),
     );
-    expect(mainSource).toContain("<span>Download PNG</span>");
+    expect(mainSource).toContain('id="downloadSelectedButton"');
+    expect(mainSource).toContain('id="downloadSelectedLabel"');
     expect(mainSource).toContain('class="format-action-row"');
     expect(mainSource).toContain('class="alternate-format-actions"');
     expect(mainSource).toContain('data-export="svg"');
@@ -35,7 +36,7 @@ describe("intent-first UI contract", () => {
     expect(mainSource).not.toContain("<summary>More formats</summary>");
     expect(mainSource.indexOf('id="scanTestDetails"')).toBeLessThan(mainSource.indexOf('id="formatGuidance"'));
     expect(mainSource.indexOf('id="formatGuidance"')).toBeLessThan(mainSource.indexOf('class="format-action-row"'));
-    expect(formatRow.indexOf("<span>Download PNG</span>")).toBeLessThan(formatRow.indexOf('data-export="svg"'));
+    expect(formatRow.indexOf('id="downloadSelectedButton"')).toBeLessThan(formatRow.indexOf('data-export="png"'));
     expect(formatRow.indexOf('data-export="stl"')).toBeLessThan(formatRow.indexOf('data-export="obj"'));
     expect(mainSource.indexOf('data-export="pdf"')).toBeLessThan(mainSource.indexOf('id="nativeExportActions"'));
     expect(mainSource.indexOf('id="copyImage"')).toBeLessThan(mainSource.indexOf('id="shareImage"'));
@@ -77,7 +78,7 @@ describe("intent-first UI contract", () => {
     expect(mainSource).toContain('id="model3dPitch"');
     expect(mainSource).toContain('id="model3dYaw"');
     expect(mainSource).toContain('id="model3dPreviewPanel"');
-    expect(mainSource).toContain("update3dPreviewVisibility(exportFormat)");
+    expect(mainSource).toContain("selectExportFormat(exportFormat)");
     expect(mainSource.indexOf('id="model3dDetails"')).toBeGreaterThan(mainSource.indexOf('id="customizeDetails"'));
     expect(mainSource.indexOf('id="model3dDetails"')).toBeLessThan(mainSource.indexOf('class="tool-surface batch-zone'));
     expect(mainSource).toContain("registerServiceWorker();");

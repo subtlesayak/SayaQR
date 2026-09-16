@@ -196,6 +196,7 @@ let logoAutoApplied = false;
 let logoAutoSuppressedFor = "";
 let currentPayload = "";
 let currentSvg = "";
+let selectedExportFormat: ExportFormat = "png";
 let selected3dFormat: "" | "stl" | "3mf" | "obj" = "";
 let batchData: CsvData | null = null;
 let batchValidation: BatchValidationResult | null = null;
@@ -429,6 +430,7 @@ function renderApp(): void {
               <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
               <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
               <label class="field"><span>Raised height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
+              <label class="field field-wide"><span>Color strategy</span><select id="model3dColorStrategy"><option value="single">Single color</option><option value="two">Base + QR two-color</option><option value="three" selected>Base + modules + finders</option></select></label>
               <label class="field"><span>Preview pitch <strong id="model3dPitchValue">35°</strong></span><input id="model3dPitch" type="range" min="15" max="75" value="35" /></label>
               <label class="field"><span>Preview yaw <strong id="model3dYawValue">-35°</strong></span><input id="model3dYaw" type="range" min="-180" max="180" value="-35" /></label>
             </div>
@@ -509,17 +511,18 @@ function renderApp(): void {
           </details>
           <div id="warnings" class="warnings" aria-live="polite"></div>
         </section>
-        <p id="formatGuidance" class="format-info" aria-live="polite" aria-atomic="true"><strong id="formatGuidanceName">PNG</strong><span id="formatGuidanceText">Recommended for everyday use</span></p>
+          <p id="formatGuidance" class="format-info" aria-live="polite" aria-atomic="true"><strong id="formatGuidanceName">PNG</strong><span id="formatGuidanceText">Recommended for everyday use</span></p>
         <div class="export-actions" aria-label="Export and share QR code">
-          <div class="format-action-row" role="group" aria-label="Download formats">
-            <button class="primary-export" type="button" data-export="png" aria-describedby="formatGuidance" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span>Download PNG</span></button>
+          <div class="format-action-row" role="group" aria-label="Choose export format">
+            <button id="downloadSelectedButton" class="primary-export" type="button" aria-describedby="formatGuidance" disabled><svg class="download-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg><span id="downloadSelectedLabel">Download PNG</span></button>
             <div class="alternate-format-actions">
-              <button type="button" data-export="svg" aria-describedby="formatGuidance" disabled>SVG</button>
-              <button type="button" data-export="webp" aria-describedby="formatGuidance" disabled>WebP</button>
-              <button type="button" data-export="pdf" aria-describedby="formatGuidance" disabled>PDF</button>
-              <button type="button" data-export="stl" aria-describedby="formatGuidance" disabled>STL</button>
-              <button type="button" data-export="3mf" aria-describedby="formatGuidance" disabled>3MF</button>
-              <button type="button" data-export="obj" aria-describedby="formatGuidance" disabled>OBJ</button>
+              <button type="button" data-export="png" aria-describedby="formatGuidance" aria-pressed="true" disabled>PNG</button>
+              <button type="button" data-export="svg" aria-describedby="formatGuidance" aria-pressed="false" disabled>SVG</button>
+              <button type="button" data-export="webp" aria-describedby="formatGuidance" aria-pressed="false" disabled>WebP</button>
+              <button type="button" data-export="pdf" aria-describedby="formatGuidance" aria-pressed="false" disabled>PDF</button>
+              <button type="button" data-export="stl" aria-describedby="formatGuidance" aria-pressed="false" disabled>STL</button>
+              <button type="button" data-export="3mf" aria-describedby="formatGuidance" aria-pressed="false" disabled>3MF</button>
+              <button type="button" data-export="obj" aria-describedby="formatGuidance" aria-pressed="false" disabled>OBJ</button>
             </div>
           </div>
           <div id="nativeExportActions" class="secondary-export-actions" data-count="0" hidden>
@@ -814,6 +817,7 @@ const DESIGN_CONTROL_IDS = new Set([
   "model3dSize",
   "model3dBase",
   "model3dHeight",
+  "model3dColorStrategy",
   "model3dProfile",
   "model3dPitch",
   "model3dYaw",
@@ -1026,9 +1030,16 @@ function updateSliderLabels(): void {
 }
 
 function get3dOptions(renderOptions: QrRenderOptions) {
+  const colorStrategy = (document.querySelector<HTMLSelectElement>("#model3dColorStrategy")?.value ?? "three") as "single" | "two" | "three";
+  const baseOptions = qr3dOptionsFromRenderOptions(renderOptions);
   return {
-    ...qr3dOptionsFromRenderOptions(renderOptions),
+    ...baseOptions,
     profile: (document.querySelector<HTMLSelectElement>("#model3dProfile")?.value ?? "bambu-ams") as Qr3dModelOptions["profile"],
+    colorStrategy,
+    moduleColor: colorStrategy === "single" ? baseOptions.baseColor : baseOptions.moduleColor,
+    finderColor: colorStrategy === "three" ? baseOptions.finderColor : colorStrategy === "two" ? baseOptions.moduleColor : baseOptions.baseColor,
+    hasLogo: Boolean(renderOptions.logoDataUrl),
+    stylized: renderOptions.moduleStyle !== "classic" || renderOptions.rounded > 0 || renderOptions.finderStyle !== "square",
     sizeMm: Number(document.querySelector<HTMLSelectElement>("#model3dSize")?.value ?? 100),
     baseHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? 2),
     moduleHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? 1.2),
@@ -1377,12 +1388,27 @@ function updateFormatGuidance(format: ExportFormat): void {
   if (text) text.textContent = EXPORT_FORMAT_GUIDANCE[format];
 }
 
+function selectExportFormat(format: ExportFormat): void {
+  selectedExportFormat = format;
+  updateFormatGuidance(format);
+  document.querySelectorAll<HTMLButtonElement>("[data-export]").forEach((button) => {
+    const selected = button.dataset.export === format;
+    button.setAttribute("aria-pressed", String(selected));
+    button.classList.toggle("is-selected", selected);
+  });
+  const label = document.querySelector<HTMLElement>("#downloadSelectedLabel");
+  if (label) label.textContent = `Download ${format.toUpperCase()}`;
+  update3dPreviewVisibility(format);
+}
+
 function updateExportAvailability(available: boolean): void {
   document.querySelectorAll<HTMLButtonElement>("[data-export]").forEach((button) => {
     button.disabled = !available;
   });
   const mobileToggle = document.querySelector<HTMLButtonElement>("#mobileExportToggle");
   if (mobileToggle) mobileToggle.disabled = !available;
+  const downloadButton = document.querySelector<HTMLButtonElement>("#downloadSelectedButton");
+  if (downloadButton) downloadButton.disabled = !available;
   const copyButton = document.querySelector<HTMLButtonElement>("#copyImage");
   const shareButton = document.querySelector<HTMLButtonElement>("#shareImage");
   if (copyButton) copyButton.disabled = !available;
@@ -1841,6 +1867,11 @@ function wireEvents(): void {
       return;
     }
 
+    if (target.closest("#downloadSelectedButton")) {
+      void exportCurrent(selectedExportFormat);
+      return;
+    }
+
     if (target.closest("#mobileExportToggle")) {
       toggleMobileExportMenu();
       return;
@@ -1848,10 +1879,9 @@ function wireEvents(): void {
 
     const exportButton = target.closest<HTMLElement>("[data-export]");
     const exportFormat = exportButton?.dataset.export;
-    if (exportFormat) {
-      update3dPreviewVisibility(exportFormat);
+    if (isExportFormat(exportFormat)) {
+      selectExportFormat(exportFormat);
       setMobileExportMenu(false);
-      void exportCurrent(exportFormat);
       return;
     }
 
@@ -1873,14 +1903,14 @@ function wireEvents(): void {
     showFormatGuidance(event.target);
   });
   formatActionRow?.addEventListener("pointerleave", () => {
-    if (!formatActionRow.contains(document.activeElement)) updateFormatGuidance("png");
+    if (!formatActionRow.contains(document.activeElement)) updateFormatGuidance(selectedExportFormat);
   });
   formatActionRow?.addEventListener("focusin", (event) => {
     showFormatGuidance(event.target);
   });
   formatActionRow?.addEventListener("focusout", () => {
     queueMicrotask(() => {
-      if (!formatActionRow.contains(document.activeElement)) updateFormatGuidance("png");
+      if (!formatActionRow.contains(document.activeElement)) updateFormatGuidance(selectedExportFormat);
     });
   });
 

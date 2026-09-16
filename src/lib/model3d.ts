@@ -6,6 +6,8 @@ export interface Qr3dModelOptions {
   profile?: Qr3dPrintProfile;
   reliefMode?: "raised" | "engraved";
   colorStrategy?: "single" | "two" | "three";
+  hasLogo?: boolean;
+  stylized?: boolean;
   sizeMm?: number;
   baseHeightMm?: number;
   moduleHeightMm?: number;
@@ -65,6 +67,8 @@ const DEFAULT_3D_OPTIONS = {
   profile: "bambu-ams" as Qr3dPrintProfile,
   reliefMode: "raised" as "raised" | "engraved",
   colorStrategy: "three" as "single" | "two" | "three",
+  hasLogo: false,
+  stylized: false,
   sizeMm: 100,
   baseHeightMm: 2,
   moduleHeightMm: 1.2,
@@ -88,6 +92,8 @@ export function getQr3dPrintabilityWarnings(qr: NayukiQrCode, options: Qr3dModel
   else if (cellSize < 1.5) warnings.push({ level: "warning", message: `Fine QR cells (${cellSize.toFixed(2)} mm). A 0.4 mm nozzle may soften detail.` });
   if (moduleHeight < 0.6) warnings.push({ level: "warning", message: "Raised height below 0.6 mm may disappear on the first layers." });
   if (options.reliefMode === "engraved") warnings.push({ level: "info", message: "Engraved QR uses recessed floors; verify contrast and scan reliability after printing." });
+  if (options.hasLogo) warnings.push({ level: "info", message: "Center logos are not represented in 3D exports." });
+  if (options.stylized) warnings.push({ level: "info", message: "Decorative 2D module styling is simplified to square 3D cells." });
   if (options.profile === "laser-cnc") warnings.push({ level: "info", message: "Laser/CNC output is a geometric reference; verify tool diameter and depth separately." });
   warnings.push({ level: "info", message: "STL is single-material; use 3MF for Bambu material assignment or OBJ for Blender." });
   return warnings;
@@ -417,7 +423,7 @@ export function qrToMtl(options: Qr3dModelOptions = {}): string {
   ].join("\n")).join("\n\n") + "\n";
 }
 
-function modelReadme(options: Qr3dModelOptions = {}): string {
+export function qr3dReadme(options: Qr3dModelOptions = {}): string {
   const profile = QR3D_PRINT_PROFILES.find((item) => item.id === options.profile) ?? QR3D_PRINT_PROFILES[0];
   return [
     "SayaQR 3D QR coaster",
@@ -439,7 +445,7 @@ export async function objZipBlob(qr: NayukiQrCode, options: Qr3dModelOptions = {
   return createZip([
     { name: objName, data: qrToObj(qr, options, mtlName) },
     { name: mtlName, data: qrToMtl(options) },
-    { name: "README.txt", data: modelReadme(options) },
+    { name: "README.txt", data: qr3dReadme(options) },
   ]);
 }
 
@@ -531,7 +537,7 @@ export async function threeMfBlob(qr: NayukiQrCode, options: Qr3dModelOptions = 
     },
     {
       name: "README.txt",
-      data: modelReadme(options),
+      data: qr3dReadme(options),
     },
   ];
   return createZip(files);
