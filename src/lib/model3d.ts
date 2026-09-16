@@ -242,6 +242,28 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
     return isFinderArea(x, y, qr.size) ? 2 : 1;
   }
 
+  function addMaterialLayer(zBottom: number, zTop: number): void {
+    const materialAt = (x: number, y: number): MaterialIndex => cellMaterial(x - quietZone, y - quietZone) ?? 0;
+    const addWall = (x1: number, y1: number, x2: number, y2: number, material: MaterialIndex): void => {
+      addQuad(triangles, { x: x1, y: y1, z: zBottom }, { x: x2, y: y2, z: zBottom }, { x: x2, y: y2, z: zTop }, { x: x1, y: y1, z: zTop }, material);
+    };
+    for (let y = 0; y < baseGridSize; y++) {
+      for (let x = 0; x < baseGridSize; x++) {
+        const material = materialAt(x, y);
+        const x1 = origin + x * cellSize;
+        const x2 = x1 + cellSize;
+        const y1 = origin + y * cellSize;
+        const y2 = y1 + cellSize;
+        addQuad(triangles, { x: x1, y: y1, z: zTop }, { x: x2, y: y1, z: zTop }, { x: x2, y: y2, z: zTop }, { x: x1, y: y2, z: zTop }, material);
+        addQuad(triangles, { x: x1, y: y2, z: zBottom }, { x: x2, y: y2, z: zBottom }, { x: x2, y: y1, z: zBottom }, { x: x1, y: y1, z: zBottom }, material);
+        if (x === 0 || materialAt(x - 1, y) !== material) addWall(x1, y2, x1, y1, material);
+        if (x === baseGridSize - 1 || materialAt(x + 1, y) !== material) addWall(x2, y1, x2, y2, material);
+        if (y === 0 || materialAt(x, y - 1) !== material) addWall(x2, y1, x1, y1, material);
+        if (y === baseGridSize - 1 || materialAt(x, y + 1) !== material) addWall(x1, y2, x2, y2, material);
+      }
+    }
+  }
+
   if (reliefMode === "engraved") {
     // Build a watertight perforated shell directly from the occupancy grid.
     // QR cells are absent from both planes; only their shared boundary walls
@@ -272,20 +294,9 @@ function modelTriangles(qr: NayukiQrCode, inputOptions: Qr3dModelOptions = {}): 
 
   addBaseShell(triangles, origin, origin, sizeMm, baseHeight, baseGridSize, 0);
 
-  // Raised mode gets a printable underside inlay. Engraved mode intentionally
-  // skips QR cells entirely so they remain open through-holes.
-  for (let y = 0; y < baseGridSize; y++) {
-    for (let x = 0; x < baseGridSize; x++) {
-      const x1 = origin + x * cellSize;
-      const x2 = x1 + cellSize;
-      const y1 = origin + y * cellSize;
-      const y2 = y1 + cellSize;
-      const undersideMaterial = cellMaterial(x - quietZone, y - quietZone);
-      if (reliefMode === "raised") {
-        addBox(triangles, x1, y1, x2, y2, 0, undersideThickness, undersideMaterial ?? 0);
-      }
-    }
-  }
+  // Raised mode gets a continuous printable underside inlay. Engraved mode
+  // intentionally skips this layer entirely so its cells remain through-holes.
+  if (reliefMode === "raised") addMaterialLayer(0, undersideThickness);
 
   // Keep the raised base object closed around the perimeter.
   for (let y = 0; y < baseGridSize; y++) {
