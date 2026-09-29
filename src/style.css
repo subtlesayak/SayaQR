@@ -169,7 +169,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(340px, 0.95fr) minmax(360px, 1.05fr);
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
   gap: 18px;
   padding: 18px clamp(16px, 4vw, 44px) 36px;
   align-items: start;
@@ -198,6 +198,31 @@ h2 {
 .preview-zone,
 .batch-zone {
   padding: 18px;
+}
+
+/* The controls read like a short setup form before advanced options open. */
+.controls {
+  padding: 20px;
+  border: 1px solid #d9dee7;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.controls .section-heading {
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.controls .section-heading h2 {
+  font-size: 1.08rem;
+  letter-spacing: 0;
+}
+
+.controls-intro {
+  margin: 0 0 16px;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .preview-zone {
@@ -255,6 +280,10 @@ h2 {
 
 .quick-content {
   margin-bottom: 8px;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
@@ -272,8 +301,10 @@ h2 {
 }
 
 .quick-content-heading > label:first-child {
-  font-size: 0.84rem;
-  font-weight: 750;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 .import-qr-action {
@@ -318,7 +349,17 @@ h2 {
 }
 
 .quick-content textarea {
-  min-height: 78px;
+  min-height: 54px;
+  border-color: #bfc7d3;
+  border-radius: 10px;
+  background: #ffffff;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.quick-content textarea::placeholder {
+  color: #94a3b8;
 }
 
 .import-status,
@@ -1490,6 +1531,13 @@ input[type="file"] {
   background: #fbfcff;
 }
 
+.controls > .disclosure {
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .disclosure > summary,
 .technical-payload > summary {
   min-height: 42px;
@@ -1504,7 +1552,10 @@ input[type="file"] {
 .controls > .disclosure > summary {
   display: flex;
   align-items: center;
-  padding: 11px 12px;
+  min-height: 52px;
+  padding: 12px 2px;
+  color: #1e293b;
+  font-size: 0.94rem;
 }
 
 .disclosure[open] > summary,
@@ -1536,7 +1587,40 @@ input[type="file"] {
 
 .disclosure-body {
   min-width: 0;
-  padding: 2px 12px 14px;
+  padding: 2px 2px 16px;
+}
+
+.controls > .disclosure:not([open]) > summary:hover {
+  color: #0f766e;
+}
+
+.controls > .model3d-disclosure {
+  margin-top: 4px;
+}
+
+.controls > .model3d-disclosure > summary {
+  font-weight: 850;
+}
+
+.controls input[type="text"],
+.controls input[type="url"],
+.controls input[type="email"],
+.controls input[type="tel"],
+.controls input[type="number"],
+.controls input[type="datetime-local"],
+.controls select,
+.controls textarea {
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.controls input[type="range"] {
+  accent-color: #1f2937;
+}
+
+.controls .category-select select {
+  min-height: 46px;
+  font-weight: 700;
 }
 
 .disclosure-body.design-grid {

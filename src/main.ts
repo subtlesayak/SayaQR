@@ -294,16 +294,17 @@ function renderApp(): void {
           <h2>Create QR</h2>
           <span id="modeHint"></span>
         </div>
+        <p class="controls-intro">Paste content below and SayaQR will detect the QR type automatically.</p>
         <div id="quickContentDropZone" class="field field-wide quick-content">
           <div class="quick-content-heading">
-            <label for="autoContent">Quick content</label>
+            <label for="autoContent">Text or URL</label>
             <label class="import-qr-action" for="qrImport">
               <svg class="import-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4M4 5v4M20 5h-4M20 5v4M4 19h4M4 19v-4M20 19h-4M20 19v-4M9 9h6v6H9z"/></svg>
               <span>Import QR image</span>
               <input id="qrImport" type="file" accept="image/*" />
             </label>
           </div>
-          <textarea id="autoContent" rows="3" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}">${escapeHtml(DEFAULT_QUICK_CONTENT_VALUE)}</textarea>
+          <textarea id="autoContent" rows="2" placeholder="${escapeHtml(DEFAULT_QUICK_CONTENT_PLACEHOLDER)}">${escapeHtml(DEFAULT_QUICK_CONTENT_VALUE)}</textarea>
         </div>
         <p id="qrImportStatus" class="import-status" aria-live="polite"></p>
         <p id="autoDetectStatus" class="detect-status" aria-live="polite">Type or paste content; SayaQR detects the QR type automatically.</p>
