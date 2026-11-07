@@ -56,6 +56,7 @@
 | Area | Included |
 | --- | --- |
 | **Intent-aware input** | Automatic type detection, structured field editing, human-readable previews, and content-aware filenames. |
+| **Compact encoding** | Automatic numeric/alphanumeric/UTF-8 segmentation can reduce mixed-content QR grids while preserving the payload and selected error correction. The original encoder remains a fallback, and optimized output never uses a larger grid. |
 | **Design controls** | Independent module, finder, and background colors, transparency, quiet zone, module size, rounded modules, finder style, center logos with optional backing/stroke, and collapsed advanced module styles. |
 | **Scan safety** | Contrast, quiet-zone, logo-size, and payload-density warnings plus local blur, size, contrast, and rotation simulations. |
 | **Flexible output** | Inline PNG, SVG, WebP, WYSIWYG PDF, STL, 3MF, and OBJ coaster downloads; image copy and native sharing when supported. |
