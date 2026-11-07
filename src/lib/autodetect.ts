@@ -29,6 +29,10 @@ function decodeLoose(value: string): string {
   }
 }
 
+function decodeUriComponent(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
 function splitEscaped(value: string, separator: string): string[] {
   const parts: string[] = [];
   let cell = "";
@@ -60,7 +64,7 @@ function parseMailto(raw: string): PayloadFields {
   const [email, queryString = ""] = withoutScheme.split("?");
   const params = new URLSearchParams(queryString);
   return {
-    email: decodeURIComponent(email),
+    email: decodeUriComponent(email),
     subject: params.get("subject") ?? "",
     body: params.get("body") ?? "",
   };
@@ -98,6 +102,10 @@ function parseVCard(raw: string): PayloadFields {
     if (upper.startsWith("EMAIL")) fields.email = value;
     if (upper.startsWith("URL")) fields.website = value;
     if (upper.startsWith("NOTE")) fields.note = value;
+    if (upper.split(";")[0] === "ADR") {
+      const parts = splitEscaped(rest.join(":"), ";");
+      for (const [index, key] of ["street", "city", "region", "postalCode", "country"].entries()) fields[key] = parts[index + 2] ?? "";
+    }
   }
   return fields;
 }
@@ -130,9 +138,9 @@ function parseGeo(raw: string): PayloadFields {
   const match = raw.match(/^geo:([^,?]+),([^?]+)(?:\?q=.*\((.*)\))?/i);
   if (!match) return { text: raw };
   return {
-    latitude: decodeURIComponent(match[1]),
-    longitude: decodeURIComponent(match[2]),
-    label: match[3] ? decodeURIComponent(match[3]) : "",
+    latitude: decodeUriComponent(match[1]),
+    longitude: decodeUriComponent(match[2]),
+    label: match[3] ? decodeUriComponent(match[3]) : "",
   };
 }
 

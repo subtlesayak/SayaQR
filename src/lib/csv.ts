@@ -49,8 +49,7 @@ export function parseCsv(input: string): CsvData {
 }
 
 export function parseTextList(input: string): CsvData {
-  const values = parseDelimitedRows(input)
-    .flat()
+  const values = input.split(/\r\n|[\r\n]/)
     .map((value) => value.trim())
     .filter(Boolean);
 

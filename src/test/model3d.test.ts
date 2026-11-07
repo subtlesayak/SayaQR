@@ -53,19 +53,20 @@ describe("3D QR exports", () => {
     expect(text).toContain("name=\"QR modules\"");
     expect(text).toContain("name=\"Finder modules\"");
     expect(text).toContain('p1="1" p2="1" p3="1"');
-    expect(text).toContain('<item objectid="4"/>');
+    expect(text).toContain('<component objectid="4"/>');
+    expect(text).toContain('<item objectid="5"/>');
     expect(text).toContain("unit=\"millimeter\"");
     expect(text).toContain("README.txt");
   });
 
-  it("keeps engraved 3MF base, module, and finder objects separate", async () => {
+  it("builds engraved 3MF from only the non-empty base mesh", async () => {
     const qr = createQrCode("hello", "HIGH");
     const blob = await threeMfBlob(qr, { reliefMode: "engraved" });
     const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
     expect(text).toContain('name="Coaster base"');
-    expect(text).toContain('name="QR modules"');
-    expect(text).toContain('name="Finder modules"');
-    expect((text.match(/<object id=/g) ?? []).length).toBe(3);
+    expect(text).not.toContain('<object id="3"');
+    expect(text).not.toContain('<object id="4"');
+    expect((text.match(/<object id=/g) ?? []).length).toBe(2);
   });
 
   it("creates Blender-ready OBJ and MTL files", async () => {
@@ -101,7 +102,7 @@ describe("3D QR exports", () => {
       expect.objectContaining({ level: "info", message: expect.stringContaining("3MF") }),
     ]));
     expect(getQr3dPrintabilityWarnings(qr, { reliefMode: "engraved", baseHeightMm: 0.8, moduleHeightMm: 1.2 })).toEqual(expect.arrayContaining([
-      expect.objectContaining({ level: "warning", message: expect.stringContaining("underside stays flat") }),
+      expect.objectContaining({ message: expect.stringContaining("support bridges") }),
     ]));
   });
 
@@ -112,7 +113,9 @@ describe("3D QR exports", () => {
     expect(islands.count).toBeGreaterThan(0);
     expect(islands.smallestCells).toBeGreaterThan(0);
     expect(mesh.degenerateFacets).toBe(0);
-    expect(mesh.boundaryEdges + mesh.nonManifoldEdges).toBeGreaterThan(0);
+    expect(mesh.boundaryEdges + mesh.nonManifoldEdges).toBe(0);
+    expect(mesh.inconsistentEdges).toBe(0);
+    expect(mesh.watertight).toBe(true);
   });
 
   it("keeps engraved QR openings watertight and see-through", () => {
@@ -120,6 +123,8 @@ describe("3D QR exports", () => {
     const mesh = validateQr3dMesh(qr, { reliefMode: "engraved" });
     expect(mesh.degenerateFacets).toBe(0);
     expect(mesh.boundaryEdges).toBe(0);
-    expect(mesh.nonManifoldEdges).toBeGreaterThanOrEqual(0);
+    expect(mesh.nonManifoldEdges).toBe(0);
+    expect(mesh.inconsistentEdges).toBe(0);
+    expect(mesh.watertight).toBe(true);
   });
 });

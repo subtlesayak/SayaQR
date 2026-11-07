@@ -190,7 +190,8 @@ export function validateBatchRows(
 }
 
 function csvCell(value: string | number): string {
-  const text = String(value);
+  const raw = String(value);
+  const text = /^[\s\u0000-\u001f]*[=+@-]/.test(raw) ? `'${raw}` : raw;
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

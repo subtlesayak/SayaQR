@@ -58,11 +58,11 @@ describe("WYSIWYG export contract", () => {
 });
 
 describe("installed PWA sharing", () => {
-  it("declares a relative GET share target", () => {
+  it("declares a private relative POST share target", () => {
     expect(manifest.share_target).toEqual({
-      action: "./",
-      method: "GET",
-      enctype: "application/x-www-form-urlencoded",
+      action: "./share",
+      method: "POST",
+      enctype: "multipart/form-data",
       params: { title: "title", text: "text", url: "url" },
     });
   });

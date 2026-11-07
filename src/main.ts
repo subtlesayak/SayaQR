@@ -28,6 +28,8 @@ import {
 } from "./lib/design-preferences";
 import { formatPayload, QR_MODES, type PayloadFields, type QrMode } from "./lib/payloads";
 import { createQrCode } from "./lib/qr";
+import { LatestOperation } from "./lib/latest-operation";
+import { originalStructuredPayload as preserveStructuredPayload } from "./lib/payload-source";
 import { getScannabilityWarnings } from "./lib/scannability";
 import {
   exportFilename,
@@ -51,7 +53,7 @@ import {
   type ModuleStyle,
   type QrRenderOptions,
 } from "./lib/render";
-import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, objZipBlob, QR3D_PRINT_PROFILES, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob, validateQr3dMesh, type Qr3dModelOptions } from "./lib/model3d";
+import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, modelTriangles, objZipBlob, QR3D_PRINT_PROFILES, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob, validateQr3dMesh, type Qr3dModelOptions } from "./lib/model3d";
 import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
@@ -92,7 +94,7 @@ const MODULE_STYLE_HINTS: Record<ModuleStyle, string> = {
 const COLOR_DEPENDENT_MODULE_STYLES = new Set<ModuleStyle>(["split-finders", "sticker"]);
 
 const DEFAULT_QUICK_CONTENT_PLACEHOLDER = "Paste a URL, Wi-Fi string, email, phone, vCard, UPI ID, event, or coordinates";
-const DEFAULT_QUICK_CONTENT_VALUE = "example.com";
+const DEFAULT_QUICK_CONTENT_VALUE = "";
 const QUICK_CONTENT_PLACEHOLDERS: Record<QrMode, string> = {
   text: "Type plain text, notes, serial numbers, or any short message",
   url: "example.com/path or https://example.com/path",
@@ -195,10 +197,15 @@ let logoSelection: LogoPresetId | "custom" | "none" = "none";
 let logoAutoApplied = false;
 let logoAutoSuppressedFor = "";
 let currentPayload = "";
+let originalStructuredPayload: string | null = null;
+const qrImportOperation = new LatestOperation();
+const logoImportOperation = new LatestOperation();
 let currentSvg = "";
 let selectedExportFormat: ExportFormat = "png";
 let selected3dFormat: "" | "stl" | "3mf" | "obj" = "";
 let model3dDragState: { x: number; y: number; pitch: number; yaw: number } | null = null;
+let previewMeshKey = "";
+let previewMesh: ReturnType<typeof modelTriangles> = [];
 let batchData: CsvData | null = null;
 let batchValidation: BatchValidationResult | null = null;
 let batchGenerating = false;
@@ -497,10 +504,10 @@ function renderApp(): void {
           <canvas id="model3dPreview" width="720" height="420" aria-label="Isometric 3D QR coaster preview"></canvas>
           <div class="model3d-preview-readout">
             <span id="model3dDimensions" aria-live="polite">100 × 100 × 3.2 mm</span>
-            <span>Pitch <strong id="model3dPitchValue">35°</strong> · Yaw <strong id="model3dYawValue">-35°</strong></span>
+            <span>Pitch <strong id="model3dPitchValue">60°</strong> · Yaw <strong id="model3dYawValue">-35°</strong></span>
           </div>
           <div class="model3d-preview-sliders" aria-label="3D preview angle controls">
-            <label class="field"><span>Pitch</span><input id="model3dPitch" type="range" min="-180" max="180" value="35" /></label>
+            <label class="field"><span>Pitch</span><input id="model3dPitch" type="range" min="-180" max="180" value="60" /></label>
             <label class="field"><span>Yaw</span><input id="model3dYaw" type="range" min="-180" max="180" value="-35" /></label>
           </div>
         </div>
@@ -654,7 +661,7 @@ function updateDetectionStatus(result?: DetectionResult): void {
     return;
   }
   status.textContent = input.value.trim()
-    ? `Looks like ${detection.label}. Confidence: ${detection.confidence}.`
+    ? `Looks like ${detection.label}. Confidence: ${detection.confidence}.${originalStructuredPayload !== null ? " Original payload preserved; editing details rebuilds it from the supported fields." : ""}`
     : "Type or paste content; SayaQR detects the QR type automatically.";
 }
 
@@ -682,6 +689,8 @@ function applyDetectionResult(detection: DetectionResult): void {
 }
 
 function updateFromQuickContent(rawValue: string): void {
+  qrImportOperation.invalidate();
+  originalStructuredPayload = preserveStructuredPayload(rawValue, categorySelection === AUTO_CATEGORY_VALUE);
   syncLogoFromQuickContent(rawValue);
   const detection = detectQrContent(rawValue);
   if (categorySelection === AUTO_CATEGORY_VALUE) {
@@ -760,6 +769,7 @@ function updateLogoUploadName(fileName = ""): void {
 }
 
 function applyLogoPreset(presetId: LogoPresetId, auto: boolean): void {
+  logoImportOperation.invalidate();
   const preset = getLogoPreset(presetId);
   if (!preset) return;
   logoDataUrl = logoPresetToDataUrl(preset);
@@ -773,6 +783,7 @@ function applyLogoPreset(presetId: LogoPresetId, auto: boolean): void {
 }
 
 function clearCenterLogo(suppressAuto = false): void {
+  logoImportOperation.invalidate();
   logoDataUrl = "";
   logoSelection = "none";
   logoAutoApplied = false;
@@ -1033,7 +1044,7 @@ function updateSliderLabels(): void {
   const model3dBase = Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? "2");
   const model3dHeight = Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? "1.2");
   const model3dBottom = Number(document.querySelector<HTMLInputElement>("#model3dBottom")?.value ?? "0.4");
-  const model3dPitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? "35");
+  const model3dPitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? "60");
   const model3dYaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? "-35");
   document.querySelector("#marginValue")!.textContent = margin;
   document.querySelector("#moduleSizeValue")!.textContent = moduleSize;
@@ -1066,8 +1077,13 @@ function get3dOptions(renderOptions: QrRenderOptions) {
 }
 
 function update3dGuidance(): void {
+  const engraved = document.querySelector<HTMLSelectElement>("#model3dReliefMode")?.value === "engraved";
+  for (const id of ["model3dHeight", "model3dBottom"]) {
+    const field = document.querySelector<HTMLElement>(`#${id}`)?.closest<HTMLElement>(".field");
+    if (field) field.hidden = engraved;
+  }
   const guidance = document.querySelector<HTMLElement>("#model3dGuidance");
-  if (!guidance || !currentPayload.trim()) {
+  if (!guidance || !currentPayload.trim() || !selected3dFormat) {
     if (guidance) guidance.textContent = "Select a 3D format to see print guidance.";
     return;
   }
@@ -1100,76 +1116,74 @@ function update3dProfile(): void {
 function draw3dPreview(): void {
   const panel = document.querySelector<HTMLElement>("#model3dPreviewPanel");
   const canvas = document.querySelector<HTMLCanvasElement>("#model3dPreview");
-  if (!panel || panel.hidden || !canvas || !currentPayload.trim()) return;
-  const renderOptions = getRenderOptions();
-  const modelOptions = get3dOptions(renderOptions);
-  const qr = createQrCode(currentPayload, renderOptions.ecc);
+  if (!panel || panel.hidden || !canvas) return;
   const context = canvas.getContext("2d");
   if (!context) return;
+  const options = get3dOptions(getRenderOptions());
   const width = canvas.clientWidth || 720;
   const height = Math.max(280, width * (420 / 720));
-  const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
-  const backingWidth = Math.round(width * pixelRatio);
-  const backingHeight = Math.round(height * pixelRatio);
-  if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
-    canvas.width = backingWidth;
-    canvas.height = backingHeight;
-  }
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.imageSmoothingEnabled = true;
-  context.fillStyle = "#f7fafc";
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.fillStyle = "#cbd5e1";
   context.fillRect(0, 0, width, height);
-
-  const pitch = (Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? 35) * Math.PI) / 180;
-  const yaw = (Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? -35) * Math.PI) / 180;
-  const sinYaw = Math.sin(yaw);
-  const cosYaw = Math.cos(yaw);
-  const sinPitch = Math.sin(pitch);
-  const cosPitch = Math.cos(pitch);
-  const totalCells = qr.size + Math.floor(modelOptions.quietZone ?? 4) * 2;
-  const cell = 1 / totalCells;
-  const scale = Math.min(width, height) * 0.72;
-  const project = (x: number, y: number, z: number): [number, number] => {
-    const rotatedX = x * cosYaw - y * sinYaw;
-    const rotatedY = x * sinYaw + y * cosYaw;
-    return [width / 2 + rotatedX * scale, height / 2 + rotatedY * sinPitch * scale - z * cosPitch * scale];
-  };
-  const point = (x: number, y: number, z: number): [number, number] => project(x - 0.5, y - 0.5, z);
-  const polygon = (points: Array<[number, number]>, fill: string): void => {
-    context.beginPath();
-    context.moveTo(points[0][0], points[0][1]);
-    for (const [x, y] of points.slice(1)) context.lineTo(x, y);
-    context.closePath();
-    context.fillStyle = fill;
-    context.fill();
-    context.strokeStyle = "rgba(15, 23, 42, 0.16)";
-    context.lineWidth = 1;
-    context.stroke();
-  };
-  const slabDepth = Math.max(0.012, (modelOptions.baseHeightMm ?? 2) / (modelOptions.sizeMm ?? 100));
-  const relief = Math.max(0.004, (modelOptions.moduleHeightMm ?? 1.2) / (modelOptions.sizeMm ?? 100));
-  const base = [point(0, 0, 0), point(1, 0, 0), point(1, 1, 0), point(0, 1, 0)];
-  const baseTop = [point(0, 0, slabDepth), point(1, 0, slabDepth), point(1, 1, slabDepth), point(0, 1, slabDepth)];
-  polygon([base[0], base[1], base[2], base[3]], "#cbd5e1");
-  polygon([base[0], base[1], baseTop[1], baseTop[0]], "#94a3b8");
-  polygon([base[1], base[2], baseTop[2], baseTop[1]], "#64748b");
-  polygon(baseTop, modelOptions.baseColor ?? "#ffffff");
-
-  for (let y = 0; y < qr.size; y++) {
-    for (let x = 0; x < qr.size; x++) {
-      if (!qr.getModule(x, y)) continue;
-      const left = (x + (modelOptions.quietZone ?? 4)) * cell;
-      const top = (y + (modelOptions.quietZone ?? 4)) * cell;
-      const right = left + cell;
-      const bottom = top + cell;
-      const z = modelOptions.reliefMode === "engraved" ? slabDepth - relief : slabDepth + relief;
-      const fill = isFinderPreviewCell(x, y, qr.size) ? (modelOptions.finderColor ?? "#0f172a") : (modelOptions.moduleColor ?? "#0f172a");
-      polygon([point(left, top, z), point(right, top, z), point(right, bottom, z), point(left, bottom, z)], fill);
+  if (!currentPayload.trim()) return;
+  const key = JSON.stringify([currentPayload, getRenderOptions().ecc, options]);
+  try {
+    if (key !== previewMeshKey) {
+      previewMesh = modelTriangles(createQrCode(currentPayload, getRenderOptions().ecc), options, false);
+      previewMeshKey = key;
     }
+  } catch {
+    previewMesh = [];
+    previewMeshKey = "";
+    return;
+  }
+  const pitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? 60) * Math.PI / 180;
+  const yaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? -35) * Math.PI / 180;
+  const size = options.sizeMm ?? 100;
+  const totalHeight = (options.baseHeightMm ?? 2) + (options.reliefMode === "engraved" ? 0 : options.moduleHeightMm ?? 1.2);
+  const rotate = (v: { x: number; y: number; z: number }): [number, number, number] => {
+    const x = v.x * Math.cos(yaw) - v.y * Math.sin(yaw);
+    const y = v.x * Math.sin(yaw) + v.y * Math.cos(yaw);
+    const z = v.z - totalHeight / 2;
+    return [x, y * Math.sin(pitch) - z * Math.cos(pitch), y * Math.cos(pitch) + z * Math.sin(pitch)];
+  };
+  const corners = [-size / 2, size / 2].flatMap((x) => [-size / 2, size / 2].flatMap((y) => [0, totalHeight].map((z) => rotate({ x, y, z }))));
+  const minX = Math.min(...corners.map((v) => v[0])), maxX = Math.max(...corners.map((v) => v[0]));
+  const minY = Math.min(...corners.map((v) => v[1])), maxY = Math.max(...corners.map((v) => v[1]));
+  const scale = Math.min((width - 32) / Math.max(1, maxX - minX), (height - 32) / Math.max(1, maxY - minY));
+  const colors = [options.baseColor ?? "#ffffff", options.moduleColor ?? "#0f172a", options.finderColor ?? "#0f172a"];
+  const faces = [];
+  for (let index = 0; index < previewMesh.length; index += 2) {
+    const first = previewMesh[index], second = previewMesh[index + 1];
+    const points = [first.a, first.b, first.c, second.c].map(rotate);
+    const [a, b, c] = points;
+    const area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    if (area <= 0) continue;
+    const color = colors[first.material];
+    const shade = first.a.z === first.b.z && first.b.z === first.c.z ? 1 : 0.72;
+    const shaded = "#" + [1, 3, 5].map((offset) => Math.round(parseInt(color.slice(offset, offset + 2), 16) * shade).toString(16).padStart(2, "0")).join("");
+    faces.push({ points, color: shaded, depth: points.reduce((sum, v) => sum + v[2], 0) / 4 });
+  }
+  faces.sort((a, b) => a.depth - b.depth);
+  for (const face of faces) {
+    context.beginPath();
+    face.points.forEach((v, index) => {
+      const x = width / 2 + (v[0] - (minX + maxX) / 2) * scale;
+      const y = height / 2 + (v[1] - (minY + maxY) / 2) * scale;
+      if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+    });
+    context.closePath();
+    context.fillStyle = face.color;
+    context.fill();
+    context.strokeStyle = face.color;
+    context.lineWidth = 0.35;
+    context.stroke();
   }
   const dimensions = document.querySelector<HTMLElement>("#model3dDimensions");
-  if (dimensions) dimensions.textContent = `${modelOptions.sizeMm ?? 100} × ${modelOptions.sizeMm ?? 100} × ${((modelOptions.baseHeightMm ?? 2) + (modelOptions.moduleHeightMm ?? 1.2)).toFixed(1)} mm`;
+  if (dimensions) dimensions.textContent = `${size} x ${size} x ${totalHeight.toFixed(1)} mm`;
 }
 
 function update3dPreviewVisibility(format: string): void {
@@ -1188,7 +1202,7 @@ function wire3dPreviewControls(): void {
   if (!canvas) return;
   canvas.addEventListener("pointerdown", (event) => {
     if (!selected3dFormat) return;
-    const pitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? 35);
+    const pitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? 60);
     const yaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? -35);
     model3dDragState = { x: event.clientX, y: event.clientY, pitch, yaw };
     canvas.setPointerCapture(event.pointerId);
@@ -1214,7 +1228,7 @@ function wire3dPreviewControls(): void {
   document.querySelector<HTMLButtonElement>("#model3dResetView")?.addEventListener("click", () => {
     const pitch = document.querySelector<HTMLInputElement>("#model3dPitch");
     const yaw = document.querySelector<HTMLInputElement>("#model3dYaw");
-    if (pitch) pitch.value = "35";
+    if (pitch) pitch.value = "60";
     if (yaw) yaw.value = "-35";
     updateSliderLabels();
     draw3dPreview();
@@ -1224,10 +1238,6 @@ function wire3dPreviewControls(): void {
 function wrapPreviewAngle(value: number): number {
   const wrapped = ((value + 180) % 360 + 360) % 360 - 180;
   return Math.round(wrapped);
-}
-
-function isFinderPreviewCell(x: number, y: number, size: number): boolean {
-  return (x < 7 && y < 7) || (x >= size - 7 && y < 7) || (x < 7 && y >= size - 7);
 }
 
 function updateLogoStrokeColorVisibility(): void {
@@ -1428,6 +1438,7 @@ function applyAutomaticFix(): void {
 }
 
 async function importQrImage(file: File): Promise<void> {
+  const operation = qrImportOperation.start();
   const status = document.querySelector<HTMLParagraphElement>("#qrImportStatus");
   const quickContent = document.querySelector<HTMLTextAreaElement>("#autoContent");
   if (!status || !quickContent) return;
@@ -1435,22 +1446,24 @@ async function importQrImage(file: File): Promise<void> {
   status.textContent = "Reading QR locally...";
   try {
     const decoded = await decodeQrImageFile(file);
+    if (!qrImportOperation.isCurrent(operation)) return;
     if (!decoded) {
       status.textContent = "No QR code found. Current content kept.";
       return;
     }
 
-    const detection = detectQrContent(decoded.data);
     quickContent.value = decoded.data;
+    const picker = document.querySelector<HTMLInputElement>("#qrImport");
+    if (picker) picker.value = "";
     categorySelection = AUTO_CATEGORY_VALUE;
-    syncLogoFromQuickContent(decoded.data);
-    applyDetectionResult(detection);
+    updateFromQuickContent(decoded.data);
     status.textContent = "QR imported locally";
   } catch (error) {
+    if (!qrImportOperation.isCurrent(operation)) return;
     status.textContent = error instanceof Error ? error.message : "This QR image could not be read.";
   } finally {
     const picker = document.querySelector<HTMLInputElement>("#qrImport");
-    if (picker) picker.value = "";
+    if (picker && qrImportOperation.isCurrent(operation)) picker.value = "";
   }
 }
 
@@ -1517,7 +1530,7 @@ function updateQr(): void {
 
   const options = getRenderOptions();
   const fields = collectPayloadFields();
-  currentPayload = formatPayload(currentMode, fields);
+  currentPayload = originalStructuredPayload ?? formatPayload(currentMode, fields);
   update3dGuidance();
   draw3dPreview();
   const previewZone = document.querySelector<HTMLElement>(".preview-zone");
@@ -1559,6 +1572,8 @@ function updateQr(): void {
 }
 
 function scheduleQrUpdate(): void {
+  currentSvg = "";
+  updateExportAvailability(false);
   if (pendingQrFrame) return;
   pendingQrFrame = window.requestAnimationFrame(() => {
     pendingQrFrame = 0;
@@ -1690,6 +1705,36 @@ function applyShareTargetFromUrl(): boolean {
   categorySelection = AUTO_CATEGORY_VALUE;
   updateFromQuickContent(value);
   return true;
+}
+
+function workerRequest(worker: ServiceWorker, data: Record<string, string>): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = window.setTimeout(() => { channel.port1.close(); resolve({}); }, 4000);
+    channel.port1.onmessage = (event) => {
+      window.clearTimeout(timer);
+      channel.port1.close();
+      resolve(event.data ?? {});
+    };
+    worker.postMessage(data, [channel.port2]);
+  });
+}
+
+async function applyPrivateShare(): Promise<void> {
+  const token = new URLSearchParams(window.location.hash.slice(1)).get("share");
+  if (!token || !("serviceWorker" in navigator)) return;
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  const operation = qrImportOperation.start();
+  const registration = await navigator.serviceWorker.ready;
+  if (!registration.active) return;
+  const response = await workerRequest(registration.active, { type: "take-share", token });
+  if (!qrImportOperation.isCurrent(operation)) return;
+  if (typeof response.value === "string" && response.value) {
+    const content = document.querySelector<HTMLTextAreaElement>("#autoContent");
+    if (content) content.value = response.value;
+    categorySelection = AUTO_CATEGORY_VALUE;
+    updateFromQuickContent(response.value);
+  }
 }
 
 function setMobileExportMenu(open: boolean): void {
@@ -2004,6 +2049,14 @@ function wireEvents(): void {
         updateFromQuickContent(target.value);
         return;
       }
+      if (target.hasAttribute("data-payload-field")) {
+        qrImportOperation.invalidate();
+        if (originalStructuredPayload !== null) {
+          const status = document.querySelector<HTMLElement>("#autoDetectStatus");
+          if (status) status.textContent = "Details changed. Unsupported fields from the original payload are not included.";
+        }
+        originalStructuredPayload = null;
+      }
 
       if (target.id === "rememberDesign") {
         handleDesignMemoryToggle((target as HTMLInputElement).checked);
@@ -2086,6 +2139,7 @@ function wireEvents(): void {
   });
 
   document.querySelector<HTMLInputElement>("#logoUpload")?.addEventListener("change", async (event) => {
+    const operation = logoImportOperation.start();
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     const status = document.querySelector<HTMLParagraphElement>("#logoUploadStatus");
@@ -2099,7 +2153,9 @@ function wireEvents(): void {
     updateLogoUploadName(file.name);
     if (status) status.textContent = "Processing logo locally...";
     try {
-      logoDataUrl = await rasterizeImageFileToPng(file);
+      const processedLogo = await rasterizeImageFileToPng(file);
+      if (!logoImportOperation.isCurrent(operation)) return;
+      logoDataUrl = processedLogo;
       logoSelection = "custom";
       logoAutoApplied = false;
       logoAutoSuppressedFor = "";
@@ -2107,6 +2163,7 @@ function wireEvents(): void {
       if (status) status.textContent = "Custom logo rasterized locally.";
       scheduleQrUpdate();
     } catch (error) {
+      if (!logoImportOperation.isCurrent(operation)) return;
       input.value = "";
       updateLogoUploadName();
       if (status) status.textContent = error instanceof Error ? error.message : "This logo could not be decoded.";
@@ -2179,6 +2236,8 @@ function wireEvents(): void {
   document.querySelector<HTMLSelectElement>("#csvContentColumn")?.addEventListener("change", refreshBatchValidation);
   document.querySelector<HTMLSelectElement>("#csvNameColumn")?.addEventListener("change", refreshBatchValidation);
   document.querySelector<HTMLSelectElement>("#modeSelect")?.addEventListener("change", (event) => {
+    qrImportOperation.invalidate();
+    originalStructuredPayload = null;
     categorySelection = (event.target as HTMLSelectElement).value as CategorySelection;
     const quickValue = document.querySelector<HTMLTextAreaElement>("#autoContent")?.value ?? "";
     if (quickValue.trim()) {
@@ -2213,9 +2272,14 @@ function registerServiceWorker(): void {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register(`${import.meta.env.BASE_URL}sw.js`)
-      .then((registration) => {
-        if (status) status.textContent = "Offline ready";
+      .then(async (registration) => {
+        if (status) status.textContent = "Offline pending";
         void registration.update();
+        const ready = await navigator.serviceWorker.ready;
+        if (ready.active) {
+          const result = await workerRequest(ready.active, { type: "offline-status" });
+          if (status) status.textContent = result.ready === true ? "Offline ready" : "Offline pending";
+        }
       })
       .catch(() => {
         if (status) status.textContent = "Offline pending";
@@ -2239,6 +2303,7 @@ if (!hasShareTargetContent) {
 }
 updateQr();
 registerServiceWorker();
+void applyPrivateShare();
 
 
 

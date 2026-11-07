@@ -51,6 +51,7 @@ export function escapeVCard(value: string): string {
 
 function field(fields: PayloadFields, key: string): string {
   const value = fields[key];
+  if (key === "ssid" || key === "password") return typeof value === "string" ? value : "";
   return typeof value === "string" ? value.trim() : "";
 }
 

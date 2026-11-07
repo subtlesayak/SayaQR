@@ -65,6 +65,12 @@
 | **Opt-in design memory** | Save visual preferences under `sayaqr:design:v1`; content and uploaded files are never persisted. |
 | **Offline PWA** | Installable app, native share target, relative paths for GitHub Pages, and locally bundled dependencies. |
 
+Imported Wi-Fi, contact, payment, calendar, and other structured QR strings keep their original payload until you edit the supported detail fields. Wi-Fi network names and passwords preserve significant spaces. TXT batch files use one literal payload per line; commas and quotes are content, not separators.
+
+Raised 3D exports use closed base, QR, and finder material parts in one 3MF assembly. STL exports contain only the outer solid shell. Engraved mode is a through-hole stencil with sparse 0.4 mm support bridges that keep enclosed regions attached. Place the stencil on a contrasting surface and test scanning before printing. The 3D preview uses the exported mesh and its actual dimensions; OBJ retains fine coordinate precision for editing.
+
+Installed PWA shares use a service-worker-intercepted POST and a one-time in-memory handoff. Shared payloads are never sent to the hosting server or written to Cache Storage. The offline badge becomes ready only after the worker confirms a fully cached app shell. Updating removes older SayaQR caches, including legacy query-bearing cache entries.
+
 ## Privacy by design
 
 SayaQR has no backend and makes no content API calls. QR payloads, Wi-Fi passwords, UPI details, contacts, locations, events, imported images, custom logos, and batch rows remain on the device.

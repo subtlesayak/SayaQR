@@ -11,20 +11,18 @@ describe("batch file parsing", () => {
     ]);
   });
 
-  it("parses comma and newline separated TXT items", () => {
+  it("preserves commas within each TXT line", () => {
     const data = parseTextList("https://one.example, https://two.example\nhttps://three.example");
     expect(data.rows.map((row) => row.Content)).toEqual([
-      "https://one.example",
-      "https://two.example",
+      "https://one.example, https://two.example",
       "https://three.example",
     ]);
   });
 
-  it("preserves quoted commas inside TXT items", () => {
+  it("treats quotes as literal TXT content", () => {
     const data = parseTextList("\"https://example.com/a,b\",https://two.example");
     expect(data.rows.map((row) => row.Content)).toEqual([
-      "https://example.com/a,b",
-      "https://two.example",
+      '"https://example.com/a,b",https://two.example',
     ]);
   });
 
