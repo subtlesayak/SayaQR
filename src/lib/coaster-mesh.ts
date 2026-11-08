@@ -11,6 +11,7 @@ export interface CoasterMeshOptions {
   margin: number;
   engraved: boolean;
   colorStrategy?: "single" | "two" | "three";
+  bridgeWidth?: number;
 }
 
 export function buildCoasterFaces(qr: NayukiQrCode, options: CoasterMeshOptions, separateParts = true): MeshFace[] {
@@ -19,7 +20,7 @@ export function buildCoasterFaces(qr: NayukiQrCode, options: CoasterMeshOptions,
   const cell = size / count;
   const divisions = engraved ? 5 : 3;
   const subdivisions = count * divisions;
-  const inset = engraved ? Math.min(0.2, cell * 0.15) : Math.min(0.04, cell * 0.04);
+  const inset = engraved ? Math.min((options.bridgeWidth ?? 0.4) / 2, cell * 0.15) : Math.min(0.04, cell * 0.04);
   const coordinates = Array.from({ length: subdivisions + 1 }, (_, i) => {
     const whole = Math.floor(i / divisions);
     const offsets = engraved ? [0, inset, cell * 0.3 - inset / 2, cell * 0.3 + inset * 1.5, cell - inset] : [0, inset, cell - inset];
@@ -32,7 +33,7 @@ export function buildCoasterFaces(qr: NayukiQrCode, options: CoasterMeshOptions,
     if (!qr.getModule(qx, qy)) continue;
     source[y * count + x] = options.colorStrategy !== "two" && ((qx < 7 && qy < 7) || (qx >= qr.size - 7 && qy < 7) || (qx < 7 && qy >= qr.size - 7)) ? 2 : 1;
   }
-  const bottom = options.bottom <= 0 ? 0 : Math.min(Math.max(0.2, options.bottom), base - 0.2);
+  const bottom = Math.max(0, Math.min(options.bottom, base - 0.0001));
   const heights = engraved ? [0, base] : bottom > 0 ? [0, bottom, base, base + relief] : [0, base, base + relief];
   const layers: Int8Array[] = [];
   for (let z = 0; z < heights.length - 1; z++) {

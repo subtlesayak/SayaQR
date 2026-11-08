@@ -2,8 +2,9 @@ import type { NayukiQrCode } from "./qr";
 import { buildCoasterMesh, buildCoasterFaces } from "./coaster-mesh";
 import type { QrRenderOptions } from "./render";
 import { createZip, type ZipInputFile } from "./zip";
+import { printDimensions, type PrintDimensionsInput } from "./print-dimensions";
 
-export interface Qr3dModelOptions {
+export interface Qr3dModelOptions extends PrintDimensionsInput {
   profile?: Qr3dPrintProfile;
   reliefMode?: "raised" | "engraved";
   colorStrategy?: "single" | "two" | "three";
@@ -31,6 +32,8 @@ export interface Qr3dPrintProfilePreset {
   reliefMode: "raised" | "engraved";
   colorStrategy: "single" | "two" | "three";
   undersideThicknessMm: number;
+  layerHeightMm: number;
+  nozzleMm: number;
 }
 
 export const QR3D_PRINT_PROFILES: readonly Qr3dPrintProfilePreset[] = [
@@ -44,6 +47,8 @@ export const QR3D_PRINT_PROFILES: readonly Qr3dPrintProfilePreset[] = [
   reliefMode: preset.id === "laser-cnc" ? "engraved" : "raised",
   colorStrategy: preset.id === "bambu-ams" ? "three" : preset.id === "filament-swap" ? "two" : "single",
   undersideThicknessMm: preset.id === "bambu-ams" ? 0.4 : 0,
+  layerHeightMm: preset.id === "resin" ? 0.05 : 0.2,
+  nozzleMm: 0.4,
 })) as readonly Qr3dPrintProfilePreset[];
 
 export const COASTER_SIZE_PRESETS = [
@@ -91,6 +96,9 @@ const DEFAULT_3D_OPTIONS = {
   baseHeightMm: 2,
   moduleHeightMm: 1.2,
   undersideThicknessMm: 0.4,
+  layerHeightMm: 0.2,
+  nozzleMm: 0.4,
+  bridgeWidthMm: 0.4,
   quietZone: 4,
   moduleColor: "#0F172A",
   finderColor: "#0F172A",
@@ -104,10 +112,14 @@ export function qr3dCellSizeMm(qr: NayukiQrCode, options: Qr3dModelOptions = {})
 }
 
 export function getQr3dPrintabilityWarnings(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Qr3dPrintabilityWarning[] {
+  const dimensions = printDimensions(options);
   const cellSize = qr3dCellSizeMm(qr, options);
   const moduleHeight = Math.max(0.4, optionValue(options, "moduleHeightMm"));
   const undersideThickness = Math.max(0.2, optionValue(options, "undersideThicknessMm"));
   const warnings: Qr3dPrintabilityWarning[] = [];
+  if (dimensions.baseLayers <= 2) warnings.push({ level: "warning", message: "Two-layer bases are flexible and fragile. Print a small sample before making a full coaster." });
+  if (options.profile !== "resin" && dimensions.layerHeightMm > dimensions.nozzleMm * 0.75) warnings.push({ level: "warning", message: "Layer height is large for the selected nozzle. Check the printer's supported layer range." });
+  if (options.reliefMode === "engraved" && cellSize * 0.3 < dimensions.bridgeWidthMm) warnings.push({ level: "warning", message: "Stencil bridges are narrower than the requested printable width. Use a larger coaster, shorter payload, or smaller nozzle." });
   if (cellSize < 1.2) warnings.push({ level: "warning", message: `Small QR cells (${cellSize.toFixed(2)} mm). Use 100 mm or larger for easier printing.` });
   else if (cellSize < 1.5) warnings.push({ level: "warning", message: `Fine QR cells (${cellSize.toFixed(2)} mm). A 0.4 mm nozzle may soften detail.` });
   if (options.reliefMode !== "engraved" && moduleHeight < 0.6) warnings.push({ level: "warning", message: "Raised height below 0.6 mm may disappear on the first layers." });
@@ -185,11 +197,13 @@ function objNumber(value: number): string {
 }
 
 function meshOptions(options: Qr3dModelOptions) {
+  const dimensions = printDimensions(options);
   return {
     size: Math.max(30, optionValue(options, "sizeMm")),
-    base: Math.max(0.8, optionValue(options, "baseHeightMm")),
-    relief: Math.max(0.4, optionValue(options, "moduleHeightMm")),
-    bottom: optionValue(options, "undersideThicknessMm"),
+    base: dimensions.baseHeightMm,
+    relief: dimensions.moduleHeightMm,
+    bottom: dimensions.undersideThicknessMm,
+    bridgeWidth: dimensions.bridgeWidthMm,
     margin: Math.max(0, Math.floor(optionValue(options, "quietZone"))),
     engraved: optionValue(options, "reliefMode") === "engraved",
     colorStrategy: optionValue(options, "colorStrategy"),
@@ -363,14 +377,17 @@ export function qrToMtl(options: Qr3dModelOptions = {}): string {
 }
 
 export function qr3dReadme(options: Qr3dModelOptions = {}): string {
+  const dimensions = printDimensions(options);
   const profile = QR3D_PRINT_PROFILES.find((item) => item.id === options.profile) ?? QR3D_PRINT_PROFILES[0];
   return [
     "SayaQR 3D QR coaster",
     "Generated locally in the browser.",
     `Profile: ${profile.name}`,
     `Size: ${optionValue(options, "sizeMm")} mm square`,
-    `Base: ${optionValue(options, "baseHeightMm")} mm`,
-    options.reliefMode === "engraved" ? "Through-hole stencil with printable support bridges" : `Raised QR height: ${optionValue(options, "moduleHeightMm")} mm`,
+    `Base: ${dimensions.baseHeightMm} mm (${dimensions.baseLayers} layers at ${dimensions.layerHeightMm} mm)`,
+    `Nozzle reference: ${dimensions.nozzleMm} mm; stencil bridge target: ${dimensions.bridgeWidthMm} mm`,
+    `Bottom inlay: ${dimensions.undersideThicknessMm} mm (${dimensions.bottomLayers} layers; raised multi-color mode only)`,
+    options.reliefMode === "engraved" ? "Through-hole stencil with printable support bridges" : `Raised QR height: ${dimensions.moduleHeightMm} mm (${dimensions.reliefLayers} layers)`,
     options.reliefMode === "engraved" ? "Engraved QR cells are through-holes; the surface beneath the coaster shows through." : "The underside is flat; QR modules are raised above the base.",
     options.reliefMode === "engraved" ? "Engraved exports have no bottom QR material; STL and OBJ preserve the openings." : "Raised exports can include a flush underside QR inlay for multi-material 3MF workflows; STL cannot preserve colors.",
     "STL is single-material. Raised 3MF contains separate base, module, and finder parts in one assembly; stencil 3MF contains only the base.",

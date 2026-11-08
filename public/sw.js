@@ -40,7 +40,11 @@ async function networkFirst(request) {
 
 async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
+  // Static shell bytes do not vary by Origin. Module-script CORS requests can
+  // otherwise miss a precached response served with Vary: Origin while offline.
+  const url = new URL(request.url);
+  const staticShell = url.pathname.includes("/assets/") || /\/(icon\.svg|manifest\.webmanifest)$/.test(url.pathname);
+  const cached = await cache.match(request, { ignoreVary: staticShell });
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok) await cache.put(request, response.clone());

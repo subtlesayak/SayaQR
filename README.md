@@ -109,6 +109,18 @@ App updates wait for the **Update available** button; they never automatically r
 
 3D geometry and topology checks run in a bundled local Web Worker, including offline. A newer preview cancels obsolete work; model downloads and batch generation can be cancelled. Coplanar mesh rectangles are merged with conforming boundary vertices to preserve closed edges. STL downloads use binary encoding; 3MF uses browser-native DEFLATE compression when available, with stored ZIP fallback. No model or QR content is sent to a server.
 
+The collapsed 3D settings include nozzle diameter, layer height, and 2/3/4/6-layer base presets. Heights round upward to whole layers; bottom inlays leave at least one base layer above them. Thin two-layer bases carry a fragility warning. Stencil bridges target at least the nozzle width where the QR cell permits it; a warning flags cells too small to meet that target. These are model settings and checks, not a replacement for your slicer's printer profile.
+
+### 3D regression fixtures
+
+`pnpm test:fixtures` creates synthetic raised, thin, stencil, single-color, and two-color OBJ/STL/3MF fixtures in a temporary directory and prints that directory. To independently check their imports, run Blender in an isolated process:
+
+~~~bash
+blender --background --factory-startup --disable-autoexec --python-exit-code 1 --python scripts/verify-blender.py -- <fixture-directory>
+~~~
+
+The checker verifies OBJ/STL import dimensions, mesh closure, positive volumes, material regions, and 3MF ZIP integrity, XML parts, and assembly structure. Unit tests also intersect models with horizontal planes to check flush bottom colors, raised top occupancy, and through-holes. These checks do not claim Bambu Studio slicing or physical print validation.
+
 Copy and Share appear only when the browser supports those capabilities. Installed PWAs can receive shared URLs or text; incoming share parameters are auto-detected locally and removed from browser history immediately.
 
 > [!NOTE]

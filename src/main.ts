@@ -57,6 +57,7 @@ import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, QR3D_PRINT_PROFILES,
 import LocalModelWorker from "./lib/model3d.worker?worker&inline";
 import { ModelJob } from "./lib/model-job";
 import type { ModelPreview } from "./lib/model3d.worker";
+import { printDimensions } from "./lib/print-dimensions";
 import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
@@ -445,10 +446,13 @@ function renderApp(): void {
             <div class="model3d-settings-grid">
               <label class="field field-wide"><span>Print profile</span><select id="model3dProfile">${QR3D_PRINT_PROFILES.map((profile) => `<option value="${profile.id}"${profile.id === "bambu-ams" ? " selected" : ""}>${profile.name}</option>`).join("")}</select><small id="model3dProfileHint" class="control-hint">${QR3D_PRINT_PROFILES[0].description}</small></label>
               <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
-              <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
-              <label class="field"><span>Top relief height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
-              <label class="field"><span>Bottom QR thickness <strong id="model3dBottomValue">0.4 mm · 2 layers</strong></span><input id="model3dBottom" type="range" min="0" max="1" step="0.2" value="0.4" /></label>
+              <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="0.1" max="4" step="0.01" value="2" /></label>
+              <label class="field"><span>Top relief height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.05" max="3" step="0.01" value="1.2" /></label>
+              <label class="field"><span>Bottom QR thickness <strong id="model3dBottomValue">0.4 mm · 2 layers</strong></span><input id="model3dBottom" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
               <label class="field"><span>Relief</span><select id="model3dReliefMode"><option value="raised" selected>Raised QR</option><option value="engraved">Engraved QR</option></select></label>
+              <label class="field"><span>Nozzle</span><select id="model3dNozzle"><option value="0.2">0.2 mm</option><option value="0.4" selected>0.4 mm</option><option value="0.6">0.6 mm</option><option value="0.8">0.8 mm</option></select></label>
+              <label class="field"><span>Layer height</span><select id="model3dLayer"><option value="0.05">0.05 mm</option><option value="0.1">0.1 mm</option><option value="0.16">0.16 mm</option><option value="0.2" selected>0.2 mm</option><option value="0.24">0.24 mm</option><option value="0.28">0.28 mm</option></select></label>
+              <label class="field"><span>Base preset</span><select id="model3dLayers"><option value="custom">Custom</option><option value="2">2 layers</option><option value="3">3 layers</option><option value="4">4 layers</option><option value="6">6 layers</option></select></label>
               <label class="field field-wide"><span>Color strategy</span><select id="model3dColorStrategy"><option value="single">Single color</option><option value="two">Base + QR two-color</option><option value="three" selected>Base + modules + finders</option></select></label>
             </div>
             <p id="model3dGuidance" class="model3d-guidance" aria-live="polite">Select a 3D format to see print guidance.</p>
@@ -1053,15 +1057,16 @@ function updateSliderLabels(): void {
   const model3dBase = Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? "2");
   const model3dHeight = Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? "1.2");
   const model3dBottom = Number(document.querySelector<HTMLInputElement>("#model3dBottom")?.value ?? "0.4");
+  const dimensions = printDimensions({ baseHeightMm: model3dBase, moduleHeightMm: model3dHeight, undersideThicknessMm: model3dBottom, layerHeightMm: Number(document.querySelector<HTMLSelectElement>("#model3dLayer")?.value ?? 0.2) });
   const model3dPitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? "60");
   const model3dYaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? "-35");
   document.querySelector("#marginValue")!.textContent = margin;
   document.querySelector("#moduleSizeValue")!.textContent = moduleSize;
   document.querySelector("#roundedValue")!.textContent = `${Math.round(rounded * 100)}%`;
   document.querySelector("#logoSizeValue")!.textContent = `${Math.round(logoScale * 100)}%`;
-  document.querySelector("#model3dBaseValue")!.textContent = `${model3dBase.toFixed(1)} mm`;
-  document.querySelector("#model3dHeightValue")!.textContent = `${model3dHeight.toFixed(1)} mm`;
-  document.querySelector("#model3dBottomValue")!.textContent = `${model3dBottom.toFixed(1)} mm · ${Math.round(model3dBottom / 0.2)} layers`;
+  document.querySelector("#model3dBaseValue")!.textContent = `${dimensions.baseHeightMm} mm · ${dimensions.baseLayers} layers`;
+  document.querySelector("#model3dHeightValue")!.textContent = `${dimensions.moduleHeightMm} mm · ${dimensions.reliefLayers} layers`;
+  document.querySelector("#model3dBottomValue")!.textContent = `${dimensions.undersideThicknessMm} mm · ${dimensions.bottomLayers} layers`;
   document.querySelector("#model3dPitchValue")!.textContent = `${model3dPitch}°`;
   document.querySelector("#model3dYawValue")!.textContent = `${model3dYaw}°`;
 }
@@ -1069,6 +1074,13 @@ function updateSliderLabels(): void {
 function get3dOptions(renderOptions: QrRenderOptions) {
   const colorStrategy = (document.querySelector<HTMLSelectElement>("#model3dColorStrategy")?.value ?? "three") as "single" | "two" | "three";
   const baseOptions = qr3dOptionsFromRenderOptions(renderOptions);
+  const dimensions = printDimensions({
+    baseHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? 2),
+    moduleHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? 1.2),
+    undersideThicknessMm: Number(document.querySelector<HTMLInputElement>("#model3dBottom")?.value ?? 0.4),
+    layerHeightMm: Number(document.querySelector<HTMLSelectElement>("#model3dLayer")?.value ?? 0.2),
+    nozzleMm: Number(document.querySelector<HTMLSelectElement>("#model3dNozzle")?.value ?? 0.4),
+  });
   return {
     ...baseOptions,
     profile: (document.querySelector<HTMLSelectElement>("#model3dProfile")?.value ?? "bambu-ams") as Qr3dModelOptions["profile"],
@@ -1079,9 +1091,7 @@ function get3dOptions(renderOptions: QrRenderOptions) {
     hasLogo: Boolean(renderOptions.logoDataUrl),
     stylized: renderOptions.moduleStyle !== "classic" || renderOptions.rounded > 0 || renderOptions.finderStyle !== "square",
     sizeMm: Number(document.querySelector<HTMLSelectElement>("#model3dSize")?.value ?? 100),
-    baseHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dBase")?.value ?? 2),
-    moduleHeightMm: Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? 1.2),
-    undersideThicknessMm: Number(document.querySelector<HTMLInputElement>("#model3dBottom")?.value ?? 0.4),
+    ...dimensions,
   };
 }
 
@@ -1115,7 +1125,7 @@ function update3dProfile(): void {
   const height = document.querySelector<HTMLInputElement>("#model3dHeight");
   if (base) base.value = String(preset.baseHeightMm);
   if (height) height.value = String(preset.moduleHeightMm);
-  for (const [id, value] of [["model3dReliefMode", preset.reliefMode], ["model3dColorStrategy", preset.colorStrategy], ["model3dBottom", String(preset.undersideThicknessMm)]]) {
+  for (const [id, value] of [["model3dReliefMode", preset.reliefMode], ["model3dColorStrategy", preset.colorStrategy], ["model3dBottom", String(preset.undersideThicknessMm)], ["model3dLayer", String(preset.layerHeightMm)], ["model3dNozzle", String(preset.nozzleMm)], ["model3dLayers", "custom"]]) {
     const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
     if (control) control.value = value;
   }
@@ -1139,7 +1149,13 @@ function draw3dPreview(): void {
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.fillStyle = "#cbd5e1";
   context.fillRect(0, 0, width, height);
-  if (!currentPayload.trim()) return;
+  if (!currentPayload.trim()) {
+    previewJob.cancel();
+    pendingPreviewKey = "";
+    previewMeshKey = "";
+    previewMesh = [];
+    return;
+  }
   const key = JSON.stringify([currentPayload, getRenderOptions().ecc, options]);
   try {
     if (key !== previewMeshKey) {
@@ -2115,6 +2131,15 @@ function wireEvents(): void {
         scheduleQrUpdate();
         return;
       }
+
+      if (target.id === "model3dLayers" || target.id === "model3dLayer") {
+        const count = Number(document.querySelector<HTMLSelectElement>("#model3dLayers")?.value);
+        const layer = Number(document.querySelector<HTMLSelectElement>("#model3dLayer")?.value ?? 0.2);
+        if (Number.isFinite(count)) document.querySelector<HTMLInputElement>("#model3dBase")!.value = String(count * layer);
+        scheduleQrUpdate();
+        return;
+      }
+      if (target.id === "model3dBase") document.querySelector<HTMLSelectElement>("#model3dLayers")!.value = "custom";
 
       if (target.id === "foreground" || target.id === "finderColor" || target.id === "background" || target.id === "logoStrokeColor") {
         syncColorControl(target.id, "picker");

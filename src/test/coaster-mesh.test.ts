@@ -41,8 +41,7 @@ describe("closed printable coaster geometry", () => {
     expect(volume).toBeLessThan(100 * 100 * 3.2);
   });
 
-  it("keeps the stencil connected and decodable on a dark backing", () => {
-    const payload = "https://example.com";
+  it.each(["HELLO WORLD", "https://example.com", "123456789012345678901234567890", "WIFI:T:WPA;S:Test;P:sample;;", "こんにちは", "x".repeat(60)])("keeps the stencil connected and decodable on a dark backing: %s", (payload) => {
     const triangles = modelTriangles(createQrCode(payload), { reliefMode: "engraved" });
     const parent = new Map<string, string>();
     const root = (key: string): string => {

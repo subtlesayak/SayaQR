@@ -19,13 +19,19 @@ function worker(failAsset = false) {
   };
   const fetch = vi.fn(async (_input: unknown, _options?: unknown) => new Response('<script src="./assets/app.js"></script><link href="./assets/app.css">'));
   const caches = { open: async () => cache, keys: async () => ["sayaqr-v2", "sayaqr-v3", "sayaqr-v4"], delete: vi.fn(async () => true) };
-  const api = new Function("self", "caches", "fetch", "URL", "Response", "crypto", source + ";return { networkFirst, receiveShare, cacheFreshShell };")(
+  const api = new Function("self", "caches", "fetch", "URL", "Response", "crypto", source + ";return { networkFirst, cacheFirst, receiveShare, cacheFreshShell };")(
     self, caches, fetch, URL, Response, { randomUUID: () => "test-token" },
   );
   return { ...api, handlers, self, caches, cache, fetch, entries };
 }
 
 describe("private share and verified offline shell", () => {
+  it("matches immutable shell assets across module-script Origin variants", async () => {
+    const w = worker();
+    const request = new Request("https://example.invalid/SayaQR/assets/app.js");
+    await w.cacheFirst(request);
+    expect(w.cache.match).toHaveBeenCalledWith(request, { ignoreVary: true });
+  });
   it("uses POST for the installed share target", () => {
     expect(JSON.parse(manifest).share_target).toMatchObject({ method: "POST", action: "./share" });
   });
