@@ -9,6 +9,7 @@ export interface CoasterMeshOptions {
   bottom: number;
   margin: number;
   engraved: boolean;
+  colorStrategy?: "single" | "two" | "three";
 }
 
 export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, separateParts = true): MeshTriangle[] {
@@ -28,10 +29,10 @@ export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, 
     const qx = x - margin;
     const qy = y - margin;
     if (!qr.getModule(qx, qy)) continue;
-    source[y * count + x] = (qx < 7 && qy < 7) || (qx >= qr.size - 7 && qy < 7) || (qx < 7 && qy >= qr.size - 7) ? 2 : 1;
+    source[y * count + x] = options.colorStrategy !== "two" && ((qx < 7 && qy < 7) || (qx >= qr.size - 7 && qy < 7) || (qx < 7 && qy >= qr.size - 7)) ? 2 : 1;
   }
-  const bottom = Math.min(Math.max(0.2, options.bottom), base - 0.2);
-  const heights = engraved ? [0, base] : [0, bottom, base, base + relief];
+  const bottom = options.bottom <= 0 ? 0 : Math.min(Math.max(0.2, options.bottom), base - 0.2);
+  const heights = engraved ? [0, base] : bottom > 0 ? [0, bottom, base, base + relief] : [0, base, base + relief];
   const layers: Int8Array[] = [];
   for (let z = 0; z < heights.length - 1; z++) {
     const layer = new Int8Array(subdivisions * subdivisions);
@@ -39,7 +40,7 @@ export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, 
       const material = source[Math.floor(y / divisions) * count + Math.floor(x / divisions)];
       layer[y * subdivisions + x] = engraved
         ? material ? -1 : 0
-        : z === 0 ? material : z === 1 ? 0 : material || -1;
+        : heights[z] >= base ? material || -1 : bottom > 0 && z === 0 ? material : 0;
     }
     if (engraved) {
       const connected = new Uint8Array(count * count);
@@ -91,7 +92,7 @@ export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, 
       // Resolve checkerboard point contacts with finite clearance/bridges.
       const coarse = (x: number, y: number): number => {
         const material = source[y * count + x];
-        return engraved ? material ? -1 : 0 : z === 0 ? material : z === 1 ? 0 : material || -1;
+        return engraved ? material ? -1 : 0 : heights[z] >= base ? material || -1 : bottom > 0 && z === 0 ? material : 0;
       };
       for (let y = 1; y < count; y++) for (let x = 1; x < count; x++) {
         const a = coarse(x - 1, y - 1), b = coarse(x, y - 1);
@@ -114,7 +115,7 @@ export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, 
     if (material < 0) continue;
     const exposed = (nx: number, ny: number, nz: number): boolean => {
       const neighbor = at(nx, ny, nz);
-      return neighbor < 0 || (separateParts && neighbor !== material);
+      return neighbor < 0 || (separateParts && options.colorStrategy !== "single" && neighbor !== material);
     };
     const x1 = coordinates[x], x2 = coordinates[x + 1], y1 = coordinates[y], y2 = coordinates[y + 1];
     const z1 = heights[z], z2 = heights[z + 1];
@@ -126,5 +127,5 @@ export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, 
     if (exposed(x, y - 1, z)) quad([v(x2,y1,z1), v(x2,y1,z2), v(x1,y1,z2), v(x1,y1,z1)], material);
     if (exposed(x, y + 1, z)) quad([v(x1,y2,z1), v(x1,y2,z2), v(x2,y2,z2), v(x2,y2,z1)], material);
   }
-  return triangles;
+  return options.colorStrategy === "single" ? triangles.map((triangle) => ({ ...triangle, material: 0 })) : triangles;
 }

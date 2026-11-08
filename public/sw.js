@@ -1,4 +1,4 @@
-const CACHE_NAME = "sayaqr-v3";
+const CACHE_NAME = "sayaqr-v4";
 const APP_SHELL = ["./manifest.webmanifest", "./icon.svg"];
 const pendingShares = new Map();
 const readyUrl = () => new URL("./offline-ready", self.registration.scope).href;
@@ -58,7 +58,7 @@ async function receiveShare(request) {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cacheFreshShell).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE_NAME).then(cacheFreshShell));
 });
 
 self.addEventListener("activate", (event) => {
@@ -69,6 +69,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (!event.source?.url?.startsWith(self.registration.scope)) return;
+  if (event.data?.type === "activate-update") {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
   const port = event.ports?.[0];
   if (!port) return;
   if (event.data?.type === "take-share") {

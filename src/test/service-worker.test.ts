@@ -18,7 +18,7 @@ function worker(failAsset = false) {
     skipWaiting: vi.fn(), clients: { claim: vi.fn() },
   };
   const fetch = vi.fn(async (_input: unknown, _options?: unknown) => new Response('<script src="./assets/app.js"></script><link href="./assets/app.css">'));
-  const caches = { open: async () => cache, keys: async () => ["sayaqr-v2", "sayaqr-v3"], delete: vi.fn(async () => true) };
+  const caches = { open: async () => cache, keys: async () => ["sayaqr-v2", "sayaqr-v3", "sayaqr-v4"], delete: vi.fn(async () => true) };
   const api = new Function("self", "caches", "fetch", "URL", "Response", "crypto", source + ";return { networkFirst, receiveShare, cacheFreshShell };")(
     self, caches, fetch, URL, Response, { randomUUID: () => "test-token" },
   );
@@ -70,6 +70,17 @@ describe("private share and verified offline shell", () => {
     w.handlers.activate({ waitUntil: (promise: Promise<void>) => { activation = promise; } });
     await activation;
     expect(w.caches.delete).toHaveBeenCalledWith("sayaqr-v2");
-    expect(w.caches.delete).not.toHaveBeenCalledWith("sayaqr-v3");
+    expect(w.caches.delete).toHaveBeenCalledWith("sayaqr-v3");
+    expect(w.caches.delete).not.toHaveBeenCalledWith("sayaqr-v4");
+  });
+
+  it("waits for explicit update acceptance before activating", async () => {
+    const w = worker();
+    let install: Promise<void> | undefined;
+    w.handlers.install({ waitUntil: (promise: Promise<void>) => { install = promise; } });
+    await install;
+    expect(w.self.skipWaiting).not.toHaveBeenCalled();
+    w.handlers.message({ source: { url: w.self.registration.scope }, data: { type: "activate-update" }, waitUntil: () => {} });
+    expect(w.self.skipWaiting).toHaveBeenCalledOnce();
   });
 });

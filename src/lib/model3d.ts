@@ -28,6 +28,9 @@ export interface Qr3dPrintProfilePreset {
   baseHeightMm: number;
   moduleHeightMm: number;
   materialNote: string;
+  reliefMode: "raised" | "engraved";
+  colorStrategy: "single" | "two" | "three";
+  undersideThicknessMm: number;
 }
 
 export const QR3D_PRINT_PROFILES: readonly Qr3dPrintProfilePreset[] = [
@@ -36,7 +39,12 @@ export const QR3D_PRINT_PROFILES: readonly Qr3dPrintProfilePreset[] = [
   { id: "filament-swap", name: "Two-color filament swap", description: "Pause-friendly base and QR height for a manual swap.", baseHeightMm: 2.4, moduleHeightMm: 0.8, materialNote: "Swap filament at the raised QR layer." },
   { id: "laser-cnc", name: "Laser / CNC engraved", description: "Flat layout reference for subtractive workflows.", baseHeightMm: 3, moduleHeightMm: 0.8, materialNote: "Use the model as a millimetre layout reference." },
   { id: "resin", name: "Resin print", description: "Lower relief for fine-detail resin printers.", baseHeightMm: 1.8, moduleHeightMm: 0.7, materialNote: "Orient and support according to your resin workflow." },
-] as const;
+].map((preset) => ({
+  ...preset,
+  reliefMode: preset.id === "laser-cnc" ? "engraved" : "raised",
+  colorStrategy: preset.id === "bambu-ams" ? "three" : preset.id === "filament-swap" ? "two" : "single",
+  undersideThicknessMm: preset.id === "bambu-ams" ? 0.4 : 0,
+})) as readonly Qr3dPrintProfilePreset[];
 
 export const COASTER_SIZE_PRESETS = [
   { value: 90, label: "90 mm · compact" },
@@ -184,6 +192,7 @@ export function modelTriangles(qr: NayukiQrCode, options: Qr3dModelOptions = {},
     bottom: optionValue(options, "undersideThicknessMm"),
     margin: Math.max(0, Math.floor(optionValue(options, "quietZone"))),
     engraved: optionValue(options, "reliefMode") === "engraved",
+    colorStrategy: optionValue(options, "colorStrategy"),
   }, separateParts);
 }
 

@@ -439,7 +439,7 @@ function renderApp(): void {
               <label class="field"><span>Coaster size</span><select id="model3dSize">${COASTER_SIZE_PRESETS.map((preset) => `<option value="${preset.value}"${preset.value === 100 ? " selected" : ""}>${preset.label}</option>`).join("")}</select></label>
               <label class="field"><span>Base thickness <strong id="model3dBaseValue">2.0 mm</strong></span><input id="model3dBase" type="range" min="1" max="4" step="0.1" value="2" /></label>
               <label class="field"><span>Top relief height <strong id="model3dHeightValue">1.2 mm</strong></span><input id="model3dHeight" type="range" min="0.4" max="3" step="0.1" value="1.2" /></label>
-              <label class="field"><span>Bottom QR thickness <strong id="model3dBottomValue">0.4 mm · 2 layers</strong></span><input id="model3dBottom" type="range" min="0.2" max="1" step="0.2" value="0.4" /></label>
+              <label class="field"><span>Bottom QR thickness <strong id="model3dBottomValue">0.4 mm · 2 layers</strong></span><input id="model3dBottom" type="range" min="0" max="1" step="0.2" value="0.4" /></label>
               <label class="field"><span>Relief</span><select id="model3dReliefMode"><option value="raised" selected>Raised QR</option><option value="engraved">Engraved QR</option></select></label>
               <label class="field field-wide"><span>Color strategy</span><select id="model3dColorStrategy"><option value="single">Single color</option><option value="two">Base + QR two-color</option><option value="three" selected>Base + modules + finders</option></select></label>
             </div>
@@ -493,7 +493,7 @@ function renderApp(): void {
             <h2>Preview</h2>
             <p id="qrStats">Waiting for content</p>
           </div>
-          <div id="offlineStatus" class="status-pill">Offline ready</div>
+          <div><div id="offlineStatus" class="status-pill">Offline pending</div><button id="applyAppUpdate" class="secondary-action" type="button" hidden>Update available</button></div>
         </div>
         <div id="qrPreview" class="qr-preview"></div>
         <div id="model3dPreviewPanel" class="model3d-preview-wrap" hidden>
@@ -1108,6 +1108,10 @@ function update3dProfile(): void {
   const height = document.querySelector<HTMLInputElement>("#model3dHeight");
   if (base) base.value = String(preset.baseHeightMm);
   if (height) height.value = String(preset.moduleHeightMm);
+  for (const [id, value] of [["model3dReliefMode", preset.reliefMode], ["model3dColorStrategy", preset.colorStrategy], ["model3dBottom", String(preset.undersideThicknessMm)]]) {
+    const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (control) control.value = value;
+  }
   const hint = document.querySelector<HTMLElement>("#model3dProfileHint");
   if (hint) hint.textContent = `${preset.description} ${preset.materialNote}`;
   updateSliderLabels();
@@ -1890,6 +1894,7 @@ async function exportBatchZip(): Promise<void> {
 
   const options = getRenderOptions();
   const files: ZipInputFile[] = [];
+  const modelOptions = Object.freeze({ ...get3dOptions(options) });
   const runtimeSkipped: BatchValidationRow[] = [];
   let processed = 0;
   let generated = 0;
@@ -1912,11 +1917,11 @@ async function exportBatchZip(): Promise<void> {
           } else if (format === "pdf") {
             files.push({ name: `${row.outputFilename}.pdf`, data: await svgToPdfBlob(svg) });
           } else if (format === "stl") {
-            files.push({ name: `${row.outputFilename}.stl`, data: stlBlob(qr, get3dOptions(options)) });
+            files.push({ name: `${row.outputFilename}.stl`, data: stlBlob(qr, modelOptions) });
           } else if (format === "3mf") {
-            files.push({ name: `${row.outputFilename}.3mf`, data: await threeMfBlob(qr, get3dOptions(options)) });
+            files.push({ name: `${row.outputFilename}.3mf`, data: await threeMfBlob(qr, modelOptions) });
           } else if (format === "obj") {
-            const bundle = await objZipBlob(qr, get3dOptions(options));
+            const bundle = await objZipBlob(qr, modelOptions);
             files.push({ name: `${row.outputFilename}-obj.zip`, data: bundle });
           } else {
             const mime = format === "webp" ? "image/webp" : "image/png";
@@ -2254,36 +2259,46 @@ function wireEvents(): void {
 
 function registerServiceWorker(): void {
   const status = document.querySelector<HTMLDivElement>("#offlineStatus");
+  const updateButton = document.querySelector<HTMLButtonElement>("#applyAppUpdate");
   if (!("serviceWorker" in navigator)) {
     if (status) status.textContent = "Offline unavailable";
     return;
   }
-
   const hadController = Boolean(navigator.serviceWorker.controller);
-  let refreshedForUpdate = false;
-  if (hadController) {
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (refreshedForUpdate) return;
-      refreshedForUpdate = true;
-      window.location.reload();
-    });
-  }
-
+  let requestedUpdate = false;
+  let waitingWorker: ServiceWorker | null = null;
+  const offerUpdate = (worker: ServiceWorker | null): void => {
+    waitingWorker = worker;
+    if (updateButton) updateButton.hidden = false;
+  };
+  updateButton?.addEventListener("click", () => {
+    requestedUpdate = true;
+    if (waitingWorker) waitingWorker.postMessage({ type: "activate-update" });
+    else window.location.reload();
+  });
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (requestedUpdate) window.location.reload();
+    else if (hadController) offerUpdate(null);
+  });
   window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register(`${import.meta.env.BASE_URL}sw.js`)
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
       .then(async (registration) => {
+        if (registration.waiting) offerUpdate(registration.waiting);
+        registration.addEventListener("updatefound", () => {
+          const installing = registration.installing;
+          installing?.addEventListener("statechange", () => {
+            if (installing.state === "installed" && registration.waiting && navigator.serviceWorker.controller) offerUpdate(registration.waiting);
+          });
+        });
         if (status) status.textContent = "Offline pending";
-        void registration.update();
+        void registration.update().catch(() => {});
         const ready = await navigator.serviceWorker.ready;
         if (ready.active) {
           const result = await workerRequest(ready.active, { type: "offline-status" });
           if (status) status.textContent = result.ready === true ? "Offline ready" : "Offline pending";
         }
       })
-      .catch(() => {
-        if (status) status.textContent = "Offline pending";
-      });
+      .catch(() => { if (status) status.textContent = "Offline pending"; });
   });
 }
 
