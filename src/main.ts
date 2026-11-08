@@ -1058,15 +1058,16 @@ function updateSliderLabels(): void {
   const model3dHeight = Number(document.querySelector<HTMLInputElement>("#model3dHeight")?.value ?? "1.2");
   const model3dBottom = Number(document.querySelector<HTMLInputElement>("#model3dBottom")?.value ?? "0.4");
   const dimensions = printDimensions({ baseHeightMm: model3dBase, moduleHeightMm: model3dHeight, undersideThicknessMm: model3dBottom, layerHeightMm: Number(document.querySelector<HTMLSelectElement>("#model3dLayer")?.value ?? 0.2) });
+  const layerText = (count: number): string => `${count} layer${count === 1 ? "" : "s"}`;
   const model3dPitch = Number(document.querySelector<HTMLInputElement>("#model3dPitch")?.value ?? "60");
   const model3dYaw = Number(document.querySelector<HTMLInputElement>("#model3dYaw")?.value ?? "-35");
   document.querySelector("#marginValue")!.textContent = margin;
   document.querySelector("#moduleSizeValue")!.textContent = moduleSize;
   document.querySelector("#roundedValue")!.textContent = `${Math.round(rounded * 100)}%`;
   document.querySelector("#logoSizeValue")!.textContent = `${Math.round(logoScale * 100)}%`;
-  document.querySelector("#model3dBaseValue")!.textContent = `${dimensions.baseHeightMm} mm · ${dimensions.baseLayers} layers`;
-  document.querySelector("#model3dHeightValue")!.textContent = `${dimensions.moduleHeightMm} mm · ${dimensions.reliefLayers} layers`;
-  document.querySelector("#model3dBottomValue")!.textContent = `${dimensions.undersideThicknessMm} mm · ${dimensions.bottomLayers} layers`;
+  document.querySelector("#model3dBaseValue")!.textContent = `${dimensions.baseHeightMm} mm · ${layerText(dimensions.baseLayers)}`;
+  document.querySelector("#model3dHeightValue")!.textContent = `${dimensions.moduleHeightMm} mm · ${layerText(dimensions.reliefLayers)}`;
+  document.querySelector("#model3dBottomValue")!.textContent = `${dimensions.undersideThicknessMm} mm · ${layerText(dimensions.bottomLayers)}`;
   document.querySelector("#model3dPitchValue")!.textContent = `${model3dPitch}°`;
   document.querySelector("#model3dYawValue")!.textContent = `${model3dYaw}°`;
 }
