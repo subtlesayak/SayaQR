@@ -53,7 +53,10 @@ import {
   type ModuleStyle,
   type QrRenderOptions,
 } from "./lib/render";
-import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, modelTriangles, objZipBlob, QR3D_PRINT_PROFILES, qr3dOptionsFromRenderOptions, stlBlob, threeMfBlob, validateQr3dMesh, type Qr3dModelOptions } from "./lib/model3d";
+import { COASTER_SIZE_PRESETS, getQr3dPrintabilityWarnings, QR3D_PRINT_PROFILES, qr3dOptionsFromRenderOptions, type Qr3dModelOptions } from "./lib/model3d";
+import LocalModelWorker from "./lib/model3d.worker?worker&inline";
+import { ModelJob } from "./lib/model-job";
+import type { ModelPreview } from "./lib/model3d.worker";
 import { createZip, type ZipInputFile } from "./lib/zip";
 
 type FieldConfig = {
@@ -205,7 +208,12 @@ let selectedExportFormat: ExportFormat = "png";
 let selected3dFormat: "" | "stl" | "3mf" | "obj" = "";
 let model3dDragState: { x: number; y: number; pitch: number; yaw: number } | null = null;
 let previewMeshKey = "";
-let previewMesh: ReturnType<typeof modelTriangles> = [];
+let previewMesh: ModelPreview["faces"] = [];
+const previewJob = new ModelJob(() => new LocalModelWorker());
+const exportJob = new ModelJob(() => new LocalModelWorker());
+const batchModelJob = new ModelJob(() => new LocalModelWorker());
+let pendingPreviewKey = "";
+let exportGeneration = 0;
 let batchData: CsvData | null = null;
 let batchValidation: BatchValidationResult | null = null;
 let batchGenerating = false;
@@ -551,6 +559,7 @@ function renderApp(): void {
           </div>
         </div>
         <p id="exportStatus" class="export-status" aria-live="polite"></p>
+        <button id="cancelModelExport" class="secondary-action" type="button" hidden>Cancel</button>
         <details class="technical-payload">
           <summary>Technical payload</summary>
           <label class="payload-output" for="payloadOutput"><span>Encoded payload</span><textarea id="payloadOutput" readonly rows="4"></textarea></label>
@@ -1091,8 +1100,6 @@ function update3dGuidance(): void {
     const options = get3dOptions(getRenderOptions());
     const qr = createQrCode(currentPayload, getRenderOptions().ecc);
     const warnings = getQr3dPrintabilityWarnings(qr, options);
-    const topology = validateQr3dMesh(qr, options);
-    if (!topology.watertight) warnings.push({ level: "warning", message: `Mesh check: ${topology.boundaryEdges} open edge${topology.boundaryEdges === 1 ? "" : "s"}, ${topology.nonManifoldEdges} non-manifold edge${topology.nonManifoldEdges === 1 ? "" : "s"}. Repair before printing.` });
     guidance.textContent = warnings.map((warning) => warning.message).join(" ");
     guidance.dataset.level = warnings.some((warning) => warning.level === "warning") ? "warning" : "info";
   } catch {
@@ -1136,8 +1143,26 @@ function draw3dPreview(): void {
   const key = JSON.stringify([currentPayload, getRenderOptions().ecc, options]);
   try {
     if (key !== previewMeshKey) {
-      previewMesh = modelTriangles(createQrCode(currentPayload, getRenderOptions().ecc), options, false);
-      previewMeshKey = key;
+      if (pendingPreviewKey !== key) {
+        pendingPreviewKey = key;
+        const label = document.querySelector<HTMLElement>("#model3dDimensions");
+        void previewJob.run<ModelPreview>({ payload: currentPayload, ecc: getRenderOptions().ecc, options, format: "preview" }, (stage) => { if (label) label.textContent = stage; })
+          .then((result) => {
+            if (pendingPreviewKey !== key) return;
+            previewMesh = result.faces;
+            previewMeshKey = key;
+            pendingPreviewKey = "";
+            const guidance = document.querySelector<HTMLElement>("#model3dGuidance");
+            if (guidance && !result.topology.watertight) {
+              guidance.textContent += " Mesh validation failed. Do not print this model.";
+              guidance.dataset.level = "warning";
+            }
+            draw3dPreview();
+          }).catch((error) => {
+            if (error.name !== "AbortError" && pendingPreviewKey === key && label) label.textContent = "3D preview unavailable";
+          });
+      }
+      return;
     }
   } catch {
     previewMesh = [];
@@ -1160,16 +1185,17 @@ function draw3dPreview(): void {
   const scale = Math.min((width - 32) / Math.max(1, maxX - minX), (height - 32) / Math.max(1, maxY - minY));
   const colors = [options.baseColor ?? "#ffffff", options.moduleColor ?? "#0f172a", options.finderColor ?? "#0f172a"];
   const faces = [];
-  for (let index = 0; index < previewMesh.length; index += 2) {
-    const first = previewMesh[index], second = previewMesh[index + 1];
-    const points = [first.a, first.b, first.c, second.c].map(rotate);
-    const [a, b, c] = points;
+  for (const first of previewMesh) {
+    const points = first.vertices.map(rotate);
+    const a = points[0], b = points[1];
+    const c = points.find((point) => Math.abs((b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0])) > 1e-9);
+    if (!c) continue;
     const area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
     if (area <= 0) continue;
     const color = colors[first.material];
-    const shade = first.a.z === first.b.z && first.b.z === first.c.z ? 1 : 0.72;
+    const shade = first.vertices.every((v) => v.z === first.vertices[0].z) ? 1 : 0.72;
     const shaded = "#" + [1, 3, 5].map((offset) => Math.round(parseInt(color.slice(offset, offset + 2), 16) * shade).toString(16).padStart(2, "0")).join("");
-    faces.push({ points, color: shaded, depth: points.reduce((sum, v) => sum + v[2], 0) / 4 });
+    faces.push({ points, color: shaded, depth: points.reduce((sum, v) => sum + v[2], 0) / points.length });
   }
   faces.sort((a, b) => a.depth - b.depth);
   for (const face of faces) {
@@ -1199,6 +1225,7 @@ function update3dPreviewVisibility(format: string): void {
   if (qrPreview) qrPreview.hidden = Boolean(selected3dFormat);
   if (previewZone) previewZone.dataset.previewMode = selected3dFormat ? "3d" : "qr";
   if (selected3dFormat) draw3dPreview();
+  else { previewJob.cancel(); pendingPreviewKey = ""; }
 }
 
 function wire3dPreviewControls(): void {
@@ -1606,6 +1633,9 @@ async function exportCurrent(format: string): Promise<void> {
   const extension = format as ExportExtension;
   const filename = exportFilename(currentMode, collectPayloadFields(), extension);
   if (status) status.textContent = "Preparing " + format.toUpperCase() + "...";
+  const generation = ++exportGeneration;
+  exportJob.cancel();
+  const cancel = document.querySelector<HTMLButtonElement>("#cancelModelExport");
 
   try {
     const renderOptions = getRenderOptions();
@@ -1614,15 +1644,18 @@ async function exportCurrent(format: string): Promise<void> {
     if (format === "png") downloadBlob(await svgToRasterBlob(currentSvg, "image/png"), filename);
     if (format === "webp") downloadBlob(await svgToRasterBlob(currentSvg, "image/webp"), filename);
     if (format === "pdf") downloadBlob(await svgToPdfBlob(currentSvg), filename);
-    if (format === "stl") downloadBlob(stlBlob(createQrCode(currentPayload, renderOptions.ecc), get3dOptions(renderOptions)), filename);
-    if (format === "3mf") downloadBlob(await threeMfBlob(createQrCode(currentPayload, renderOptions.ecc), get3dOptions(renderOptions)), filename);
-    if (format === "obj") {
-      downloadedFilename = filename.replace(/\.obj$/i, "-obj.zip");
-      downloadBlob(await objZipBlob(createQrCode(currentPayload, renderOptions.ecc), get3dOptions(renderOptions)), downloadedFilename);
+    if (["stl", "3mf", "obj"].includes(format)) {
+      if (cancel) cancel.hidden = false;
+      const blob = await exportJob.run<Blob>({ payload: currentPayload, ecc: renderOptions.ecc, options: get3dOptions(renderOptions), format }, (stage) => { if (status) status.textContent = stage; });
+      if (generation !== exportGeneration) return;
+      if (format === "obj") downloadedFilename = filename.replace(/\.obj$/i, "-obj.zip");
+      downloadBlob(blob, downloadedFilename);
     }
     if (status) status.textContent = "Downloaded " + downloadedFilename + ".";
-  } catch {
-    if (status) status.textContent = "Export failed. Try another format.";
+  } catch (error) {
+    if (status && generation === exportGeneration) status.textContent = error instanceof Error && error.name === "AbortError" ? "Export cancelled." : "Export failed. Try another format.";
+  } finally {
+    if (cancel && generation === exportGeneration) cancel.hidden = true;
   }
 }
 
@@ -1916,13 +1949,9 @@ async function exportBatchZip(): Promise<void> {
             files.push({ name: `${row.outputFilename}.svg`, data: svg });
           } else if (format === "pdf") {
             files.push({ name: `${row.outputFilename}.pdf`, data: await svgToPdfBlob(svg) });
-          } else if (format === "stl") {
-            files.push({ name: `${row.outputFilename}.stl`, data: stlBlob(qr, modelOptions) });
-          } else if (format === "3mf") {
-            files.push({ name: `${row.outputFilename}.3mf`, data: await threeMfBlob(qr, modelOptions) });
-          } else if (format === "obj") {
-            const bundle = await objZipBlob(qr, modelOptions);
-            files.push({ name: `${row.outputFilename}-obj.zip`, data: bundle });
+          } else if (["stl", "3mf", "obj"].includes(format)) {
+            const bundle = await batchModelJob.run<Blob>({ payload: row.payload, ecc: options.ecc, options: modelOptions, format });
+            files.push({ name: format === "obj" ? `${row.outputFilename}-obj.zip` : `${row.outputFilename}.${format}`, data: bundle });
           } else {
             const mime = format === "webp" ? "image/webp" : "image/png";
             files.push({ name: `${row.outputFilename}.${format}`, data: await svgToRasterBlob(svg, mime) });
@@ -1981,6 +2010,11 @@ function wireEvents(): void {
 
     if (target.closest("#cancelBatch")) {
       batchCancellation.cancel();
+      batchModelJob.cancel();
+      return;
+    }
+    if (target.closest("#cancelModelExport")) {
+      exportJob.cancel();
       return;
     }
 

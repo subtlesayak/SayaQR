@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import jsQR from "jsqr";
+import { zipText } from "./zip-reader";
 import { createQrCode } from "../lib/qr";
 import { modelTriangles, qrToObj, threeMfBlob, validateQr3dMesh } from "../lib/model3d";
 
@@ -59,7 +60,10 @@ describe("closed printable coaster geometry", () => {
       if (![t.a, t.b, t.c].every((v) => v.z === 2)) continue;
       const xs = [t.a.x, t.b.x, t.c.x].map((x) => (x + 50) * width / 100);
       const ys = [t.a.y, t.b.y, t.c.y].map((y) => (y + 50) * width / 100);
-      for (let y = Math.ceil(Math.min(...ys)); y < Math.ceil(Math.max(...ys)); y++) for (let x = Math.ceil(Math.min(...xs)); x < Math.ceil(Math.max(...xs)); x++) {
+      for (let y = Math.max(0, Math.floor(Math.min(...ys))); y < Math.min(width, Math.ceil(Math.max(...ys))); y++) for (let x = Math.max(0, Math.floor(Math.min(...xs))); x < Math.min(width, Math.ceil(Math.max(...xs))); x++) {
+        const cross = (i: number, j: number) => (xs[j] - xs[i]) * (y + 0.5 - ys[i]) - (ys[j] - ys[i]) * (x + 0.5 - xs[i]);
+        const signs = [cross(0, 1), cross(1, 2), cross(2, 0)];
+        if (!signs.every((value) => value >= -1e-8) && !signs.every((value) => value <= 1e-8)) continue;
         const offset = (y * width + x) * 4;
         pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = 255;
       }
@@ -75,10 +79,10 @@ describe("closed printable coaster geometry", () => {
     const points = obj.split("\n").filter((line) => line.startsWith("v "));
     // Material interfaces may coincide, but distinct heights must survive output.
     expect(new Set(points.map((line) => line.split(" ")[3]))).toEqual(new Set(["0", "0.0004", "0.002", "0.0032"]));
-    const xml = new TextDecoder().decode(await (await threeMfBlob(qr)).arrayBuffer());
+    const xml = await zipText(await threeMfBlob(qr));
     expect((xml.match(/<item objectid=/g) ?? []).length).toBe(1);
     expect((xml.match(/<component objectid=/g) ?? []).length).toBe(3);
-    const engraved = new TextDecoder().decode(await (await threeMfBlob(qr, { reliefMode: "engraved" })).arrayBuffer());
+    const engraved = await zipText(await threeMfBlob(qr, { reliefMode: "engraved" }));
     expect((engraved.match(/<component objectid=/g) ?? []).length).toBe(1);
     expect(engraved).not.toMatch(/<vertices>\s*<\/vertices>/);
   });

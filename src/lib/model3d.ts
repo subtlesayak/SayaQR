@@ -1,5 +1,5 @@
 import type { NayukiQrCode } from "./qr";
-import { buildCoasterMesh } from "./coaster-mesh";
+import { buildCoasterMesh, buildCoasterFaces } from "./coaster-mesh";
 import type { QrRenderOptions } from "./render";
 import { createZip, type ZipInputFile } from "./zip";
 
@@ -184,8 +184,8 @@ function objNumber(value: number): string {
   return (value / 1000).toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-export function modelTriangles(qr: NayukiQrCode, options: Qr3dModelOptions = {}, separateParts = true): Triangle[] {
-  return buildCoasterMesh(qr, {
+function meshOptions(options: Qr3dModelOptions) {
+  return {
     size: Math.max(30, optionValue(options, "sizeMm")),
     base: Math.max(0.8, optionValue(options, "baseHeightMm")),
     relief: Math.max(0.4, optionValue(options, "moduleHeightMm")),
@@ -193,7 +193,15 @@ export function modelTriangles(qr: NayukiQrCode, options: Qr3dModelOptions = {},
     margin: Math.max(0, Math.floor(optionValue(options, "quietZone"))),
     engraved: optionValue(options, "reliefMode") === "engraved",
     colorStrategy: optionValue(options, "colorStrategy"),
-  }, separateParts);
+  };
+}
+
+export function modelTriangles(qr: NayukiQrCode, options: Qr3dModelOptions = {}, separateParts = true): Triangle[] {
+  return buildCoasterMesh(qr, meshOptions(options), separateParts);
+}
+
+export function modelFaces(qr: NayukiQrCode, options: Qr3dModelOptions = {}, separateParts = true) {
+  return buildCoasterFaces(qr, meshOptions(options), separateParts);
 }
 
 function vertexKey(vertex: Vertex): string {
@@ -201,6 +209,10 @@ function vertexKey(vertex: Vertex): string {
 }
 
 export function validateQr3dMesh(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Qr3dMeshValidation {
+  return validateMeshTriangles(modelTriangles(qr, options));
+}
+
+export function validateMeshTriangles(triangles: Triangle[]): Qr3dMeshValidation {
   const edgeCounts = new Map<string, number>();
   const edgeDirections = new Map<string, number>();
   let degenerateFacets = 0;
@@ -211,7 +223,7 @@ export function validateQr3dMesh(qr: NayukiQrCode, options: Qr3dModelOptions = {
     edgeCounts.set(edge, (edgeCounts.get(edge) ?? 0) + 1);
     edgeDirections.set(edge, (edgeDirections.get(edge) ?? 0) + (first < second ? 1 : -1));
   };
-  for (const triangle of modelTriangles(qr, options)) {
+  for (const triangle of triangles) {
     const area = Math.hypot(...Object.values(normal(triangle.a, triangle.b, triangle.c))) > 0;
     if (!area || (vertexKey(triangle.a) === vertexKey(triangle.b)) || (vertexKey(triangle.b) === vertexKey(triangle.c)) || (vertexKey(triangle.c) === vertexKey(triangle.a))) {
       degenerateFacets += 1;
@@ -280,11 +292,23 @@ export function qrToStl(qr: NayukiQrCode, options: Qr3dModelOptions = {}): strin
 }
 
 export function stlBlob(qr: NayukiQrCode, options: Qr3dModelOptions = {}): Blob {
-  return new Blob([qrToStl(qr, options)], { type: "model/stl;charset=utf-8" });
+  const triangles = modelTriangles(qr, options, false);
+  const buffer = new ArrayBuffer(84 + triangles.length * 50);
+  new Uint8Array(buffer).set(new TextEncoder().encode("SayaQR binary STL; units mm"));
+  const view = new DataView(buffer);
+  view.setUint32(80, triangles.length, true);
+  let offset = 84;
+  for (const t of triangles) {
+    for (const vertex of [normal(t.a, t.b, t.c), t.a, t.b, t.c]) for (const value of [vertex.x, vertex.y, vertex.z]) {
+      view.setFloat32(offset, value, true); offset += 4;
+    }
+    offset += 2;
+  }
+  return new Blob([buffer], { type: "model/stl" });
 }
 
 export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materialLibraryName = "sayaqr-coaster.mtl"): string {
-  const triangles = modelTriangles(qr, options);
+  const polygons = buildCoasterFaces(qr, meshOptions(options));
   const vertices: string[] = [];
   const faces: string[] = [];
   const vertexKeys = new Map<string, number>();
@@ -302,26 +326,11 @@ export function qrToObj(qr: NayukiQrCode, options: Qr3dModelOptions = {}, materi
     return index;
   }
 
-  // The shared model is triangulated for STL and 3MF compatibility. OBJ can
-  // retain each source quad and weld shared coordinates for clean Blender topology.
-  for (let index = 0; index < triangles.length; index += 2) {
-    const triangle = triangles[index];
-    const next = triangles[index + 1];
-    if (!triangle) continue;
-    const material = materialNames[triangle.material];
-    if (activeGroup !== material) {
-      faces.push(`g ${material}`);
-      activeGroup = material;
-    }
-    if (activeMaterial !== material) {
-      faces.push(`usemtl ${material}`);
-      activeMaterial = material;
-    }
-    if (next && next.material === triangle.material) {
-      faces.push(`f ${vertexIndex(triangle.a)} ${vertexIndex(triangle.b)} ${vertexIndex(triangle.c)} ${vertexIndex(next.c)}`);
-    } else {
-      faces.push(`f ${vertexIndex(triangle.a)} ${vertexIndex(triangle.b)} ${vertexIndex(triangle.c)}`);
-    }
+  for (const polygon of polygons) {
+    const material = materialNames[polygon.material];
+    if (activeGroup !== material) { faces.push(`g ${material}`); activeGroup = material; }
+    if (activeMaterial !== material) { faces.push(`usemtl ${material}`); activeMaterial = material; }
+    faces.push(`f ${polygon.vertices.map(vertexIndex).join(" ")}`);
   }
 
   return [
@@ -472,5 +481,5 @@ export async function threeMfBlob(qr: NayukiQrCode, options: Qr3dModelOptions = 
       data: qr3dReadme(options),
     },
   ];
-  return createZip(files);
+  return createZip(files, { compress: true });
 }

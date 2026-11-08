@@ -1,4 +1,5 @@
 import type { NayukiQrCode } from "./qr";
+import { compactFaces, triangulateFaces, type MeshFace } from "./mesh-faces";
 
 export interface MeshVertex { x: number; y: number; z: number }
 export interface MeshTriangle { a: MeshVertex; b: MeshVertex; c: MeshVertex; material: 0 | 1 | 2 }
@@ -12,7 +13,7 @@ export interface CoasterMeshOptions {
   colorStrategy?: "single" | "two" | "three";
 }
 
-export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, separateParts = true): MeshTriangle[] {
+export function buildCoasterFaces(qr: NayukiQrCode, options: CoasterMeshOptions, separateParts = true): MeshFace[] {
   const { size, base, relief, margin, engraved } = options;
   const count = qr.size + margin * 2;
   const cell = size / count;
@@ -127,5 +128,9 @@ export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, 
     if (exposed(x, y - 1, z)) quad([v(x2,y1,z1), v(x2,y1,z2), v(x1,y1,z2), v(x1,y1,z1)], material);
     if (exposed(x, y + 1, z)) quad([v(x1,y2,z1), v(x1,y2,z2), v(x2,y2,z2), v(x2,y2,z1)], material);
   }
-  return options.colorStrategy === "single" ? triangles.map((triangle) => ({ ...triangle, material: 0 })) : triangles;
+  return compactFaces(options.colorStrategy === "single" ? triangles.map((triangle) => ({ ...triangle, material: 0 as const })) : triangles);
+}
+
+export function buildCoasterMesh(qr: NayukiQrCode, options: CoasterMeshOptions, separateParts = true): MeshTriangle[] {
+  return triangulateFaces(buildCoasterFaces(qr, options, separateParts));
 }

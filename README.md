@@ -107,6 +107,8 @@ PDF export embeds a lossless PNG at a minimum of 1600 × 1600 pixels. Transparen
 
 App updates wait for the **Update available** button; they never automatically reload a page containing unsaved QR content. Batch downloads snapshot their settings when generation starts, so later control changes cannot alter individual models inside the same ZIP.
 
+3D geometry and topology checks run in a bundled local Web Worker, including offline. A newer preview cancels obsolete work; model downloads and batch generation can be cancelled. Coplanar mesh rectangles are merged with conforming boundary vertices to preserve closed edges. STL downloads use binary encoding; 3MF uses browser-native DEFLATE compression when available, with stored ZIP fallback. No model or QR content is sent to a server.
+
 Copy and Share appear only when the browser supports those capabilities. Installed PWAs can receive shared URLs or text; incoming share parameters are auto-detected locally and removed from browser history immediately.
 
 > [!NOTE]

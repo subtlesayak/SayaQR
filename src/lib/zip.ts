@@ -53,7 +53,7 @@ function dosDateTime(date = new Date()): { date: number; time: number } {
   };
 }
 
-export async function createZip(files: ZipInputFile[]): Promise<Blob> {
+export async function createZip(files: ZipInputFile[], options: { compress?: boolean } = {}): Promise<Blob> {
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
   let offset = 0;
@@ -63,33 +63,42 @@ export async function createZip(files: ZipInputFile[]): Promise<Blob> {
     const nameBytes = encoder.encode(file.name.replace(/\\/g, "/"));
     const data = await toBytes(file.data);
     const crc = crc32(data);
+    let packed = data;
+    let method = 0;
+    if (options.compress && typeof CompressionStream !== "undefined" && data.length > 128) {
+      try {
+        const stream = new Blob([data.slice().buffer]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+        const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+        if (compressed.length < data.length) { packed = compressed; method = 8; }
+      } catch { /* Older browsers keep the standards-compliant stored ZIP fallback. */ }
+    }
 
     const localHeader = concat([
       u32(0x04034b50),
       u16(20),
-      u16(0),
-      u16(0),
+      u16(0x800),
+      u16(method),
       u16(stamp.time),
       u16(stamp.date),
       u32(crc),
-      u32(data.length),
+      u32(packed.length),
       u32(data.length),
       u16(nameBytes.length),
       u16(0),
       nameBytes,
     ]);
-    localParts.push(localHeader, data);
+    localParts.push(localHeader, packed);
 
     const centralHeader = concat([
       u32(0x02014b50),
       u16(20),
       u16(20),
-      u16(0),
-      u16(0),
+      u16(0x800),
+      u16(method),
       u16(stamp.time),
       u16(stamp.date),
       u32(crc),
-      u32(data.length),
+      u32(packed.length),
       u32(data.length),
       u16(nameBytes.length),
       u16(0),
@@ -101,7 +110,7 @@ export async function createZip(files: ZipInputFile[]): Promise<Blob> {
       nameBytes,
     ]);
     centralParts.push(centralHeader);
-    offset += localHeader.length + data.length;
+    offset += localHeader.length + packed.length;
   }
 
   const centralDirectory = concat(centralParts);

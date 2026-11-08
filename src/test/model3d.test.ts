@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { zipText } from "./zip-reader";
 import { createQrCode } from "../lib/qr";
 import { DEFAULT_RENDER_OPTIONS } from "../lib/render";
 import { getQr3dPrintabilityWarnings, objZipBlob, qr3dCellSizeMm, qr3dIslandStats, qr3dOptionsFromRenderOptions, qrToMtl, qrToObj, qrToStl, stlBlob, threeMfBlob, validateQr3dMesh } from "../lib/model3d";
@@ -14,8 +15,10 @@ describe("3D QR exports", () => {
     expect(stl).toMatch(/vertex .* 3\.2/);
 
     const blob = stlBlob(qr);
-    expect(blob.type).toBe("model/stl;charset=utf-8");
-    expect(await blob.text()).toContain("endsolid SayaQR_coaster");
+    expect(blob.type).toBe("model/stl");
+    const buffer = await blob.arrayBuffer();
+    expect(buffer.byteLength).toBe(84 + new DataView(buffer).getUint32(80, true) * 50);
+    expect(buffer.byteLength).toBeLessThan(stl.length / 2);
   });
 
   it("maps render colors into 3D model options", () => {
@@ -41,7 +44,7 @@ describe("3D QR exports", () => {
       baseColor: "#FFFFFF",
     });
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    const text = new TextDecoder().decode(bytes);
+    const text = await zipText(blob);
 
     expect(blob.type).toBe("application/zip");
     expect(bytes[0]).toBe(0x50);
@@ -62,7 +65,7 @@ describe("3D QR exports", () => {
   it("builds engraved 3MF from only the non-empty base mesh", async () => {
     const qr = createQrCode("hello", "HIGH");
     const blob = await threeMfBlob(qr, { reliefMode: "engraved" });
-    const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+    const text = await zipText(blob);
     expect(text).toContain('name="Coaster base"');
     expect(text).not.toContain('<object id="3"');
     expect(text).not.toContain('<object id="4"');
